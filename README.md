@@ -19,10 +19,10 @@ BlackMirror tests what happens when synthetic data is made from synthetic data, 
 
 | Understand | Run | Results | Reference |
 |---|---|---|---|
-| [1. Project idea](#1-project-idea) | [6. Getting started](#6-getting-started) | [7. Results](#7-results) | [10. Troubleshooting](#10-troubleshooting) |
-| [2. Tech stack](#2-tech-stack) | [8. Configuration and reproducibility](#8-configuration-and-reproducibility) | [9. Design decisions and scope](#9-design-decisions-and-scope) | [11. Glossary](#11-glossary) |
-| [3. Dataset](#3-dataset) | | | [12. Team and contributions](#12-team-and-contributions) |
-| [4. Implementation](#4-implementation) | | | [13. Acknowledgements](#13-acknowledgements) |
+| [1. Project idea](#1-project-idea) | [6. Getting started](#6-getting-started) | [7. Results](#7-results) | 
+| [2. Tech stack](#2-tech-stack) | [8. Configuration and reproducibility](#8-configuration-and-reproducibility) | [9. Design decisions and scope](#9-design-decisions-and-scope) 
+| [3. Dataset](#3-dataset) | | | [10. Team and contributions](#10-team-and-contributions) |
+| [4. Implementation](#4-implementation) | 
 | [5. Architecture and workflow](#5-architecture-and-workflow) | | | |
 
 ---
@@ -76,42 +76,7 @@ Exact versions are pinned in [`requirements.txt`](requirements.txt), so everyone
 ### 3.1 What it is
 [**Adult Income**](https://archive.ics.uci.edu/dataset/2/adult) (UCI Machine Learning Repository) comes from the 1994 US census: 48,842 people, one row each. The task is to predict whether a person earns **more than $50K a year**. About **24%** of people do.
 
-### 3.2 Columns we use (10 features + the answer)
-
-| Column | Meaning | Type |
-|---|---|---|
-| `age` | Age (17–90) | number |
-| `education-num` | Education level, 1–16 (9 = high school, 13 = bachelor's, 16 = doctorate) | number |
-| `hours-per-week` | Hours worked per week | number |
-| `workclass` | Employer type (Private, Self-employed, Government…) | category |
-| `marital-status` | Marital status | category |
-| `occupation` | Job | category |
-| `relationship` | Role in the household (Husband, Wife, Own-child…) | category |
-| `race`, `sex` | | category |
-| `native-country` | Country of birth | category |
-| **`income`** | **The answer:** 1 = >50K, 0 = ≤50K | category |
-
-### 3.3 Columns we drop, and why
-
-| Column | Why it's dropped |
-|---|---|
-| `fnlwgt` | A census sampling weight. It describes how the person was *sampled*, not the person |
-| `education` | An exact copy of `education-num` |
-| `capital-gain` | About 92% of people have 0. SDV can't copy that spike at zero (see below) |
-| `capital-loss` | About 95% of people have 0. Same problem |
-
-**Why the two capital columns matter.** SDV describes every number column with a smooth curve, and a smooth curve can't produce "exactly 0" for 92% of people. In an earlier version that kept these columns, only **0.8%** of synthetic people in G1 had a capital gain of 0, compared with 92% of real people. That made fake rows easy to spot. The Random Forest learned to set them aside, which **hid the very effect we want to measure**:
-
-| | 12 columns (earlier version) | **10 columns (this version)** |
-|---|---|---|
-| Baseline test F1 (100% real) | 0.659 | 0.631 |
-| Mean Collapse Index, HC: 90/10 · 70/30 · 50/50 | −0.3% · −0.1% · +0.1% | **+4.7% · +7.8% · +10.0%** |
-| Mean Collapse Index, SA: 90/10 · 70/30 · 50/50 | −1.2% · −0.7% · −1.0% | **+1.9% · +5.3% · +7.7%** |
-| More synthetic data means more damage? | No clear pattern | **Yes, for both algorithms** |
-
-The baseline is lower without these columns, because capital gains are a strong clue to income. The Collapse Index is *relative* to that baseline, so the comparison stays fair. The 12-column version is kept in git history: [commit `1394be3`](https://github.com/Ramprasath-0103/blackmirror/tree/1394be3).
-
-### 3.4 How we split it
+### 3.2 How we split it
 We take a stratified sample of 10,000 people and split them into three sets that never overlap. **Stratified** means every set keeps the same 24% share of >50K people, so the split itself can't explain a difference in results.
 
 | Set | Rows | Used for | Never used for |
@@ -126,7 +91,7 @@ We take a stratified sample of 10,000 people and split them into three sets that
 
 The project runs in **three phases**. Each phase is one script, and each writes files that the next one reads.
 
-### 4.1 Phase 1: Data and generation (`prepare_data.py`)
+### 4.1 1: Data and generation (`prepare_data.py`)
 
 | Step | What happens |
 |---|---|
@@ -141,7 +106,7 @@ The project runs in **three phases**. Each phase is one script, and each writes 
 
 **Mixing.** `make_mix(g, r)` takes `r × 6,400` real rows from G0 plus the rest from generation g, then shuffles them. At a given ratio the **same real rows** are used for every generation, so only the synthetic part changes.
 
-### 4.2 Phase 2: Search and evaluation (`run_experiment.py`)
+### 4.2 2: Search and evaluation (`run_experiment.py`)
 
 **Encoding.** A Random Forest needs numbers. An `OrdinalEncoder` turns each category into a code (for example "Private" becomes 3). It is fitted **once** on G0 and reused everywhere, and unseen categories become −1.
 
@@ -239,7 +204,7 @@ F1        = 2 × P × R / (P + R)        = 0.631     (shortcut: 2·TP / (2·TP +
 
 We use F1 rather than accuracy because a lazy model that always says "≤50K" scores 76% accuracy but has an F1 of 0.
 
-### 4.5 Phase 3: Degradation and analysis (`analyze.py`)
+### 4.5 3: Degradation and analysis (`analyze.py`)
 
 **Collapse Index**, for each of the 6 series (3 ratios × 2 algorithms) and each generation:
 
@@ -546,55 +511,8 @@ Every random step uses `SEED = 42` and the versions are pinned, so a rerun gives
 | T₀ = 0.05, × 0.9 per step | Matches typical F1 differences (about 0.01): it explores early and only climbs later |
 | CI uses the same algorithm's baseline | A difference between HC and SA is never mistaken for collapse |
 
-### 9.2 Scope
 
-| Kept | Dropped |
-|---|---|
-| Adult Income with a frozen test split | Feature drift, SHAP, synthetic-data quality metrics |
-| SDV recursive generation, 3 ratios | `capital-gain` and `capital-loss` ([3.3](#33-columns-we-drop-and-why)) |
-| Random Forest tuned by HC and SA | LSTM forecasting: removed to focus on the search algorithms. In an earlier version it forecast no better than simply predicting the average |
-| Accuracy, precision, recall, F1, Collapse Index | |
-
----
-
-## 10. Troubleshooting
-
-| Problem | Fix |
-|---|---|
-| `pip install` fails | Use **Python 3.12**. Very new Python versions may not have ready-made packages yet |
-| `No module named 'pandas'` (or `sdv`, `sklearn`…) | Activate the environment: `source .venv/bin/activate` (Windows: `.venv\Scripts\activate`) |
-| You moved or renamed the project folder and nothing runs | A virtual environment remembers its location. Delete `.venv` and redo [6.2](#62-install) |
-| `No module named 'src'` or `'config'` | Run the scripts from the project folder, and don't run files inside `src/` directly |
-| `prepare_data.py` can't download | Check your internet connection (it needs `archive.ics.uci.edu`) |
-| `analyze.py` says `results.csv` is missing or incomplete | Run or finish `python run_experiment.py` first |
-| Numbers differ from this README | Install the exact versions in `requirements.txt`. A different SDV version generates different rows |
-
----
-
-## 11. Glossary
-
-| Term | Meaning |
-|---|---|
-| **Synthetic data** | Made-up rows produced by a model that learned from real data |
-| **SDV / GaussianCopula** | The library and the statistical method we use to make synthetic tables |
-| **Generation (G0…G10)** | G0 is real data. G*n* is synthetic data learned from G*n−1* |
-| **Ratio** | Share of real rows in a mix. 0.7 is shown as "70/30" |
-| **Stratified split** | A split that keeps the same share of each class in every part |
-| **Random Forest** | Many decision trees, each trained on a random sample of rows, that vote together |
-| **Hyperparameter / setting** | A choice made *before* training, such as the number of trees |
-| **State / neighbour** | One combination of settings / a combination one step away in one setting |
-| **Evaluation / budget** | Training and scoring one state / the limit of 40 unique evaluations |
-| **Hill Climbing** | Always moves to the best neighbour, and stops when nothing is better |
-| **Simulated Annealing** | Sometimes accepts worse moves early on, to escape local optima |
-| **Temperature (T)** | How willing SA is to accept a worse move. It shrinks every step |
-| **Local optimum** | Better than all its neighbours, but not the best overall |
-| **Precision / Recall** | TP / (TP + FP): how often a ">50K" guess is right / TP / (TP + FN): how many >50K people are found |
-| **F1** | Balances precision and recall: 2·P·R / (P + R) |
-| **Collapse Index (CI)** | Relative loss of test F1 against the baseline |
-
----
-
-## 12. Team and contributions
+## 10. Team and contributions
 
 | Member | Role | Plan sections | Files and functions |
 |---|---|---|---|
@@ -606,9 +524,3 @@ Every random step uses `SEED = 42` and the versions are pinned, so a rerun gives
 - **The shared contract:** `config.py`, the file names in `data/` and `results/`, and the columns of `results.csv`. Agree as a team before changing them.
 - **Before pushing,** run all three scripts and check that every check passes.
 
----
-
-## 13. Acknowledgements
-
-- **Dataset:** Becker, B. & Kohavi, R. (1996). *Adult* [Dataset]. UCI Machine Learning Repository. https://doi.org/10.24432/C5XW20
-- **Synthetic data:** [SDV, the Synthetic Data Vault](https://docs.sdv.dev/)

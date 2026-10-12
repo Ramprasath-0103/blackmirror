@@ -1,8 +1,8 @@
 """
-report.py - the summary table and the written answer (plan Phase 3.3).
+report.py - the summary table and the written answer (plan Phase 3.2).
 
-    build_summary(results, ci_table, mae)       one row per ratio x algorithm -> summary.csv
-    write_findings(results, summary, forecasts) the research question answered in plain English
+    build_summary(results, ci_table)                  one row per ratio x algorithm -> summary.csv
+    write_findings(results, ci_table, summary)        the research question answered in plain English
 
 The research question has two factors, and the findings answer each one:
     Ratio effect      fix the algorithm, compare 90/10 vs 70/30 vs 50/50
@@ -17,8 +17,8 @@ import config
 CHECKPOINTS = (5, 10)   # the generations reported in the summary table
 
 
-def build_summary(results: pd.DataFrame, ci_table: pd.DataFrame, mae: pd.DataFrame) -> pd.DataFrame:
-    """For each ratio x algorithm: validation F1, test F1 and CI at G5/G10, and forecast errors."""
+def build_summary(results: pd.DataFrame, ci_table: pd.DataFrame) -> pd.DataFrame:
+    """For each ratio x algorithm: what the search found, and test F1 / CI at G5 and G10."""
     rows = []
     for ratio in config.RATIOS:
         for algorithm in config.ALGORITHMS:
@@ -31,6 +31,7 @@ def build_summary(results: pd.DataFrame, ci_table: pd.DataFrame, mae: pd.DataFra
                 "real/synthetic": config.ratio_label(ratio),
                 "algorithm": algorithm,
                 "mean_val_f1": runs["val_f1"].mean(),
+                "mean_evals_used": runs["evals_used"].mean(),
             }
             for g in CHECKPOINTS:
                 row[f"test_f1_G{g}"] = ci.loc[g, "test_f1"]
@@ -40,7 +41,7 @@ def build_summary(results: pd.DataFrame, ci_table: pd.DataFrame, mae: pd.DataFra
             rows.append(row)
 
     # Not rounded here, so the findings use exact values; analyze.py rounds when saving.
-    return pd.DataFrame(rows).merge(mae, on=["algorithm", "ratio"])
+    return pd.DataFrame(rows)
 
 
 def _ratio_effect(summary: pd.DataFrame, ci_table: pd.DataFrame) -> list[str]:
@@ -63,7 +64,7 @@ def _ratio_effect(summary: pd.DataFrame, ci_table: pd.DataFrame) -> list[str]:
     return lines
 
 
-def _algorithm_effect(results: pd.DataFrame, summary: pd.DataFrame) -> list[str]:
+def _algorithm_effect(results: pd.DataFrame, ci_table: pd.DataFrame, summary: pd.DataFrame) -> list[str]:
     lines = ["2) ALGORITHM EFFECT - Hill Climbing vs Simulated Annealing at each ratio"]
     for ratio in config.RATIOS:
         part = summary[summary["ratio"] == ratio].set_index("algorithm")
@@ -84,30 +85,26 @@ def _algorithm_effect(results: pd.DataFrame, summary: pd.DataFrame) -> list[str]
     evals = results.groupby("algorithm")["evals_used"].mean()
     lines.append(f"   -> Average evaluations used: HC {evals['HC']:.1f}, SA {evals['SA']:.1f} "
                  f"(budget {config.EVAL_BUDGET}).")
+
+    # HC only stops early when no neighbour is better, so "budget left over" = "stuck on a local optimum".
+    hc = results[results["algorithm"] == "HC"]
+    stuck = int((hc["evals_used"] < config.EVAL_BUDGET).sum())
+    lines.append(f"   -> HC stopped at a local optimum (with budget left over) in {stuck} of {len(hc)} runs.")
+
+    # Where did the single worst Collapse Index come from?
+    worst = ci_table[ci_table["generation"] > 0].nlargest(1, "collapse_index").iloc[0]
+    other = "SA" if worst["algorithm"] == "HC" else "HC"
+    other_ci = ci_table[(ci_table["algorithm"] == other) & (ci_table["ratio"] == worst["ratio"])
+                        & (ci_table["generation"] == worst["generation"])]["collapse_index"].item()
+    lines.append(f"   -> The largest Collapse Index ({worst['collapse_index']:+.1%}) is {worst['algorithm']} at "
+                 f"G{int(worst['generation'])} {config.ratio_label(worst['ratio'])}; {other} on the same "
+                 f"training data scored {other_ci:+.1%}.")
+    if other_ci < worst["collapse_index"] / 2:
+        lines.append("      Same data, very different result: that spike comes from the search, not the data.")
     return lines
 
 
-def _forecast_check(summary: pd.DataFrame, forecasts: pd.DataFrame) -> list[str]:
-    holdout = forecasts[forecasts["kind"] == "holdout"]
-    lstm_mae = (holdout["lstm"] - holdout["actual"]).abs().mean()
-    naive_mae = (holdout["naive"] - holdout["actual"]).abs().mean()
-    series_won = int((summary["lstm_mae"] < summary["naive_mae"]).sum())
-    verdict = "beats" if lstm_mae < naive_mae else "does NOT beat"
-
-    future = forecasts[forecasts["kind"] == "forecast"]["lstm"]
-    return [
-        "3) FORECAST CHECK - LSTM vs naive 'repeat the last value', on held-out G9-G10",
-        f"   LSTM MAE {lstm_mae:.4f}  vs  naive MAE {naive_mae:.4f}  "
-        f"-> the LSTM {verdict} the naive baseline ({series_won} of {len(summary)} series).",
-        f"   LSTM forecasts for G{config.N_GENERATIONS + 1}-G{config.N_GENERATIONS + config.N_FORECAST_STEPS}"
-        f" range from {future.min():+.1%} to {future.max():+.1%}.",
-        "   Note: the naive baseline is weak on a noisy series, so beating it does not by itself",
-        "   prove the LSTM found a real trend - look at lstm_forecast.png before claiming one.",
-    ]
-
-
-def write_findings(results: pd.DataFrame, ci_table: pd.DataFrame,
-                   summary: pd.DataFrame, forecasts: pd.DataFrame) -> str:
+def write_findings(results: pd.DataFrame, ci_table: pd.DataFrame, summary: pd.DataFrame) -> str:
     """Return the findings as text (also printed and saved by analyze.py)."""
     baseline = results[results["generation"] == 0].set_index("algorithm")["test_f1"]
     lines = [
@@ -119,8 +116,6 @@ def write_findings(results: pd.DataFrame, ci_table: pd.DataFrame,
         "",
         *_ratio_effect(summary, ci_table),
         "",
-        *_algorithm_effect(results, summary),
-        "",
-        *_forecast_check(summary, forecasts),
+        *_algorithm_effect(results, ci_table, summary),
     ]
     return "\n".join(lines)

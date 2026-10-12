@@ -76,16 +76,6 @@ SA_MAX_STEPS = 1_000
 ALGORITHMS = ["HC", "SA"]  # short names written to results.csv
 
 # ---------------------------------------------------------------------------
-# Forecasting (Phase 3.2)
-# ---------------------------------------------------------------------------
-LSTM_WINDOW = 3            # use 3 consecutive values to predict the next one
-LSTM_UNITS = 16
-LSTM_EPOCHS = 500
-LSTM_BATCH_SIZE = 8
-LSTM_LAST_TRAIN_GENERATION = 8   # train on G0..G8, hold out G9 and G10
-N_FORECAST_STEPS = 3             # forecast G11, G12, G13
-
-# ---------------------------------------------------------------------------
 # File locations
 # ---------------------------------------------------------------------------
 PROJECT_DIR = Path(__file__).resolve().parent
@@ -99,7 +89,6 @@ METADATA_JSON = DATA_DIR / "metadata.json"   # SDV column types, for reference
 
 RESULTS_CSV = RESULTS_DIR / "results.csv"
 COLLAPSE_INDEX_CSV = RESULTS_DIR / "collapse_index.csv"
-FORECAST_CSV = RESULTS_DIR / "lstm_forecast.csv"
 SUMMARY_CSV = RESULTS_DIR / "summary.csv"
 FINDINGS_TXT = RESULTS_DIR / "findings.txt"
 

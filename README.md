@@ -2,7 +2,7 @@
 
 ### Does a model trained on AI-generated data slowly lose touch with reality?
 
-BlackMirror studies **recursive synthetic data**: a model learns from real data, generates fake data, the next model learns from *that* fake data, and so on for 10 generations. At each generation we train a Random Forest on a mix of real and synthetic rows, tune it with two AI search algorithms, and check how well it still predicts **real** people.
+BlackMirror studies **recursive synthetic data**. A model learns from real data and generates fake data; the next model learns from *that* fake data; and so on for 10 generations. At each generation we train a Random Forest on a mix of real and synthetic rows, tune it with two AI search algorithms (**Hill Climbing** and **Simulated Annealing**), and check how well it still predicts **real** people.
 
 > **Research question:** How do the synthetic-data ratio and the optimization algorithm affect predictive performance and degradation across generations?
 
@@ -24,7 +24,7 @@ BlackMirror studies **recursive synthetic data**: a model learns from real data,
 10. [Important design decisions](#10-important-design-decisions)
 11. [Troubleshooting](#11-troubleshooting)
 12. [Glossary](#12-glossary)
-13. [Team and contributing](#13-team-and-contributing)
+13. [Team and contributions](#13-team-and-contributions)
 14. [Acknowledgements](#14-acknowledgements)
 
 ---
@@ -50,7 +50,6 @@ At every generation we:
 2. **Tune** a Random Forest on the mix with **Hill Climbing** and with **Simulated Annealing**.
 3. **Test** the tuned model once on real people it has never seen.
 4. **Measure** the loss against a model trained on 100% real data. This is the **Collapse Index**.
-5. **Forecast** the Collapse Index for future generations with an **LSTM** neural network.
 
 ### What we compare
 
@@ -64,11 +63,15 @@ At every generation we:
 |---|---|
 | Predictive performance | Accuracy, precision, recall and F1 on a frozen real test set |
 | Degradation | Collapse Index: relative F1 loss against the baseline |
-| Future degradation | LSTM forecast of G11–G13, checked against a naive baseline |
+| Search quality | Validation F1 each algorithm found, and how many evaluations it used |
 
 ### Key finding (short version)
 
-In this setup, 10 generations of synthetic data did **not** cause a clear collapse. The Collapse Index stays between −2.7% and +5.7% and moves up and down rather than rising. Simulated Annealing matched or beat Hill Climbing in 27 of 30 runs. The details are in [Results](#6-results).
+- The model's test F1 did **not** clearly degrade over 10 generations. The Collapse Index stays between −2.7% and +5.7% and moves up and down rather than rising.
+- **Simulated Annealing matched or beat Hill Climbing in 27 of 30 runs.**
+- Hill Climbing stopped at a local optimum in every run. Its worst trap caused the **biggest Collapse Index spike in the whole experiment**.
+
+The details are in [Results](#6-results).
 
 ---
 
@@ -81,8 +84,7 @@ In this setup, 10 generations of synthetic data did **not** cause a clear collap
 | **ucimlrepo** | 0.0.7 | Downloading the official Adult Income dataset from UCI | `src/dataset.py` |
 | **scikit-learn** | 1.9.1 | Stratified splits, `OrdinalEncoder`, `RandomForestClassifier`, F1 and other metrics | `src/dataset.py`, `src/encoding.py`, `src/model.py` |
 | **SDV** (Synthetic Data Vault) | 1.38.5 | `GaussianCopulaSynthesizer`, which creates the synthetic generations | `src/generation.py` |
-| **TensorFlow / Keras** | 2.21.0 / 3.15 | The LSTM that forecasts the Collapse Index | `src/forecasting.py` |
-| **NumPy** | 2.x (installed with the above) | Arrays and the random number generator used by Simulated Annealing | `src/search.py`, `src/forecasting.py` |
+| **NumPy** | 2.x (installed with the above) | The seeded random number generator used by Simulated Annealing | `src/search.py` |
 | **matplotlib** | 3.11.2 | The two result plots | `src/plots.py` |
 
 All versions are pinned in [`requirements.txt`](requirements.txt), so every team member gets the same numbers.
@@ -114,6 +116,8 @@ After cleaning there are **13 columns**: 12 features plus `income`.
 | **V** (validation) | 1,600 | Scoring hyperparameters during the search | Training, generation |
 | **Test** | 2,000 | The final score, once per run | Training, generation, search |
 
+**How SDV makes fake rows.** For each column, `GaussianCopulaSynthesizer` learns its shape: a smooth curve for numbers, and for categories a slice of the 0–1 range sized by how common each one is. It also learns a table of how strongly each pair of columns moves together. To generate a fake person, it draws linked random numbers and converts each one back into a value for its column.
+
 **Mixing.** `make_mix(g, r)` builds a 6,400-row training set from `r × 6,400` real rows from G0 and the rest from generation `g`, then shuffles it. For a given ratio the **same real rows** are used at every generation, so the only thing that changes is where the synthetic rows come from.
 
 ### Phase 2: Optimization and evaluation (`run_experiment.py`)
@@ -122,51 +126,104 @@ After cleaning there are **13 columns**: 12 features plus `income`.
 
 **Search space.** There are 6 × 6 × 5 = **180** possible Random Forest configurations:
 
-| Hyperparameter | Options |
-|---|---|
-| `n_estimators` (number of trees) | 50, 100, 150, 200, 250, 300 |
-| `max_depth` (maximum tree depth) | 2, 4, 6, 8, 10, None (no limit) |
-| `min_samples_split` (rows needed to split a node) | 2, 4, 6, 8, 10 |
+| Hyperparameter | Options | What it controls |
+|---|---|---|
+| `n_estimators` | 50, 100, 150, 200, 250, 300 | How many trees vote |
+| `max_depth` | 2, 4, 6, 8, 10, None (no limit) | How many questions in a row each tree may ask |
+| `min_samples_split` | 2, 4, 6, 8, 10 | The smallest group a tree may still split |
 
-**Search as an AI problem:**
+**Search as an AI problem.** Think of a 3-D chessboard with 180 squares. Each square has a hidden height, its F1 score, and the only way to learn a square's height is to train a forest there.
 
 | Concept | Definition |
 |---|---|
-| State | Three indices into the grid, e.g. `(1, 1, 0)` |
+| State | Three positions in the grid, e.g. `(1, 1, 0)` |
 | Initial state | `(1, 1, 0)`, meaning 100 trees, depth 4, split 2 |
 | Action | Move one hyperparameter one step up or down |
-| Transition | Gives a neighbouring state (at most 6 neighbours) |
+| Neighbours | Every state one action away. There are at most 6 (3 settings × 2 directions) |
 | Evaluation | F1 on the validation set V |
 | Goal | The highest F1 |
 | Termination | 40 unique evaluations, or no better neighbour (Hill Climbing) |
 
 **The objective** trains a forest with the state's settings on the mix and returns its F1 on V. It keeps a **cache** of every score, so a repeated state is free and only **unique** evaluations count towards the budget of 40.
 
-**Hill Climbing** (steepest ascent):
+**Hill Climbing** (steepest ascent) checks every door and goes through the best one, but only if it leads uphill:
 
 ```
 current = START
 loop:
-    score every neighbour of current
-    if the best neighbour is better than current: move there
-    else: stop                                   ← local optimum
+    score every neighbour of current                (already-scored ones are free)
+    if the best neighbour is strictly better: move there
+    else: stop                                      ← local optimum
 ```
 
-**Simulated Annealing:**
+**Simulated Annealing** opens one random door. It always goes through if the door leads uphill. If the door leads downhill, it *sometimes* goes through anyway, which is likely early on and almost never later:
 
 ```
 current = best = START,  T = 0.05
 while budget is left:
-    pick a random neighbour
-    if it is better: move there
-    else: move there anyway with probability exp(Δ / T)   ← allows escaping local optima
+    pick ONE random neighbour and score it          Δ = new F1 − current F1
+    if Δ > 0: move there
+    else: move there anyway if a random roll in [0, 1) is below exp(Δ / T)
     remember the best state ever seen
-    T = T × 0.9                                           ← cool down: explore early, climb later
+    T = T × 0.9                                     ← cool down
 ```
+
+How the temperature changes the chance of accepting a typical small drop (Δ = −0.01):
+
+| Moment | T | Chance of accepting |
+|---|---|---|
+| Start | 0.05 | 82%, so it explores freely |
+| After 20 steps | 0.006 | 19% |
+| After 40 steps | 0.0007 | about 1 in a million, so it only climbs now |
 
 Both algorithms use the same start, neighbours, budget and objective. Only the rule for accepting a move differs, so any difference in results comes from the algorithm.
 
+#### Worked example: one real run (generation 4, 50/50 mix)
+
+States are written as (trees, depth, split), and the number is the validation F1.
+
+**Hill Climbing:**
+
+| Round | Standing at | Neighbours scored | Decision |
+|---|---|---|---|
+| 1 | (100, 4, 2) **0.417** | (50,4,2) 0.422 · (150,4,2) 0.405 · (100,2,2) 0.000 · **(100,6,2) 0.522** · (100,4,4) 0.420 | best is better → **move** |
+| 2 | (100, 6, 2) **0.522** | (50,6,2) 0.529 · (150,6,2) 0.522 · (100,4,2) cached · **(100,8,2) 0.595** · (100,6,4) 0.520 | best is better → **move** |
+| 3 | (100, 8, 2) **0.595** | (50,8,2) 0.587 · (150,8,2) 0.588 · (100,6,2) cached · **(100,10,2) 0.594** · (100,8,4) 0.572 | 0.594 < 0.595 → **stop** |
+
+Hill Climbing finished at **0.595** after 14 evaluations. It missed by 0.001 and never reached "no depth limit".
+
+**Simulated Annealing** (key steps; ★ = new best ever):
+
+| Step | T | Tried | F1 | Δ | Chance / roll | Decision |
+|---|---|---|---|---|---|---|
+| 1 | 0.050 | (50, 4, 2) | 0.422 | +0.005 | — | better → move ★ |
+| 4 | 0.037 | (50, 6, 6) | 0.515 | −0.011 | 74% / 0.70 | moved **downhill** |
+| 5 | 0.033 | (50, 4, 6) | 0.422 | −0.094 | 6% / 0.98 | stay (a big drop is rarely accepted) |
+| 14 | 0.013 | (50, 10, 2) | 0.583 | −0.003 | 77% / 0.44 | moved **downhill** to depth 10, which HC refused |
+| 16 | 0.010 | (100, 8, 2) | 0.595 | +0.009 | — | ★ where HC stopped |
+| 26 | 0.004 | (150, 10, 6) | 0.603 | −0.003 | 41% / 0.04 | lucky roll → moved downhill |
+| 27 | 0.003 | (150, None, 6) | 0.618 | +0.015 | — | ★ |
+| 28 | 0.003 | (100, None, 6) | **0.633** | +0.015 | — | ★ final best |
+| 29+ | → 0 | | | | almost 0 | frozen: only stays or revisits |
+
+Simulated Annealing finished at **0.633** after 24 evaluations, which was **0.670 on Test**. Hill Climbing's result was 0.621 on Test. Two small downhill steps are what made the difference.
+
 **Final evaluation.** The best settings are used to retrain the forest, which then predicts the **Test** set **once**. Accuracy, precision, recall and F1 are appended as one row to `results/results.csv`.
+
+**How F1 is calculated.** Here it is for the baseline model on Test (2,000 people, 479 of whom really earn >50K):
+
+| | Model says >50K | Model says ≤50K |
+|---|---|---|
+| **Really >50K** | TP = 271 | FN = 208 |
+| **Really ≤50K** | FP = 73 | TN = 1,448 |
+
+```
+Precision = TP / (TP + FP) = 271 / 344 = 0.788     "when it says >50K, it is right 79% of the time"
+Recall    = TP / (TP + FN) = 271 / 479 = 0.566     "it finds 57% of the people earning >50K"
+F1        = 2 × P × R / (P + R)        = 0.659     (shortcut: 2·TP / (2·TP + FP + FN) = 542 / 823)
+```
+
+We use F1 rather than accuracy because a lazy model that always says "≤50K" gets 76% accuracy but an F1 of 0.
 
 **The grid of runs:**
 
@@ -175,7 +232,7 @@ Both algorithms use the same start, neighbours, budget and objective. Only the r
 31 mixes × 2 algorithms                                    =  62 runs
 ```
 
-### Phase 3: Degradation and forecasting (`analyze.py`)
+### Phase 3: Degradation and analysis (`analyze.py`)
 
 **Collapse Index.** There are 6 series (3 ratios × 2 algorithms), each with 11 points (G0 to G10):
 
@@ -189,18 +246,11 @@ CI_g = (F1_base − F1_g) / F1_base        F1_base = baseline test F1 of the SAM
 | CI = 0 | No change |
 | CI < 0 | Slightly better than the baseline. This is a legitimate result, so the sign is kept |
 
-**LSTM forecast:**
-
-| Item | Setting |
-|---|---|
-| Model | Keras `LSTM(16)` → `Dense(1)`, MSE loss, Adam, 500 epochs, batch size 8 |
-| Input | 3 consecutive CI values, used to predict the next value |
-| Training data | Windows from all 6 series, **G0 to G8 only** (36 windows) |
-| Honest check | Predict the held-out **G9 and G10** and measure the error (MAE) |
-| Naive baseline | "Next value = last value". The LSTM must beat this to be useful |
-| Forecast | G11 to G13, feeding each prediction back in as input |
-
-**Outputs:** two plots, a summary table and a plain-English `findings.txt` that answers the research question.
+**Outputs:**
+- Plot 1 shows the **ratio effect**.
+- Plot 2 shows the **algorithm effect**.
+- A summary table.
+- A plain-English `findings.txt` that answers both parts of the research question.
 
 ---
 
@@ -227,9 +277,7 @@ flowchart TD
     end
 
     subgraph P3["Phase 3 · analyze.py"]
-        CI["Collapse Index<br/>6 series × 11 generations"] --> L["LSTM forecast<br/>vs naive baseline"]
-        CI --> O["2 plots · summary.csv · findings.txt"]
-        L --> O
+        CI["Collapse Index<br/>6 series × 11 generations"] --> O["Plot 1: ratio effect<br/>Plot 2: algorithm effect<br/>summary.csv · findings.txt"]
     end
 
     G0 --> M
@@ -259,7 +307,6 @@ flowchart LR
         MOD["model.py"]
         SEA["search.py"]
         COL["collapse.py"]
-        FOR["forecasting.py"]
         PLO["plots.py"]
         REP["report.py"]
     end
@@ -268,10 +315,9 @@ flowchart LR
 
     PD --> DS & GEN
     RE --> DS & ENC & MIX & MOD & SEA
-    AN --> COL & FOR & PLO & REP
+    AN --> COL & PLO & REP
     MIX --> DS
     SEA --> MOD
-    FOR --> COL
     PLO --> COL
 ```
 
@@ -296,7 +342,6 @@ blackmirror/
 │   ├── model.py           ← train a Random Forest; F1, precision, recall, accuracy
 │   ├── search.py          ← search space, objective, Hill Climbing, Simulated Annealing
 │   ├── collapse.py        ← the Collapse Index
-│   ├── forecasting.py     ← the LSTM forecast and the naive baseline
 │   ├── plots.py           ← the two figures
 │   └── report.py          ← summary table and written findings
 │
@@ -315,7 +360,7 @@ The phases only talk to each other through files. This makes each phase easy to 
 | `data/val.csv` | Phase 1 | Phase 2: the search objective |
 | `data/test.csv` | Phase 1 | Phase 2: the final evaluation only |
 | `results/results.csv` | Phase 2 | Phase 3 |
-| `results/collapse_index.csv`, `lstm_forecast.csv`, `summary.csv`, `findings.txt`, `plots/` | Phase 3 | You |
+| `results/collapse_index.csv`, `summary.csv`, `findings.txt`, `plots/` | Phase 3 | You |
 
 ### 4.5 Where each part of the plan lives
 
@@ -327,18 +372,20 @@ The phases only talk to each other through files. This makes each phase easy to 
 | 1.6 Mixer | `src/mixing.py` | `make_mix()` |
 | 2.1 Encoding | `src/encoding.py` | `fit_encoder()`, `to_xy()` |
 | 2.2 Search space and objective | `src/search.py` | `neighbors()`, `Objective` |
-| 2.3 Hill Climbing / 2.4 Simulated Annealing | `src/search.py` | `hill_climbing()`, `simulated_annealing()` |
+| 2.3 Hill Climbing | `src/search.py` | `hill_climbing()` |
+| 2.4 Simulated Annealing | `src/search.py` | `simulated_annealing()` |
 | 2.5 Final evaluation | `run_experiment.py`, `src/model.py` | `run_one()`, `test_metrics()` |
 | 2.6 Run the grid | `run_experiment.py` | `main()` |
 | 3.1 Collapse Index | `src/collapse.py` | `collapse_index_table()` |
-| 3.2 LSTM forecasting | `src/forecasting.py` | `train_lstm()`, `forecast_table()`, `holdout_mae()` |
-| 3.3 Plots, table, interpretation | `src/plots.py`, `src/report.py` | `plot_*()`, `build_summary()`, `write_findings()` |
+| 3.2 Plots, table, interpretation | `src/plots.py`, `src/report.py` | `plot_collapse_index()`, `plot_hc_vs_sa()`, `build_summary()`, `write_findings()` |
+
+The plan's original LSTM forecasting step has been removed (see [Scope](#scope)).
 
 ### 4.6 How to read the code
 
 1. **Start with `config.py`** to see every setting in one place.
 2. **Read the three entry scripts in order.** Each one prints and runs numbered steps (Step 1/6, Step 2/6 …).
-3. **Open the `src/` module behind any step you want to understand.** Every module starts with a short description of what's inside and why.
+3. **For the search algorithms, read `src/search.py` from top to bottom.** It goes search space → objective → Hill Climbing → Simulated Annealing, each with a short explanation.
 
 ---
 
@@ -348,10 +395,10 @@ The phases only talk to each other through files. This makes each phase easy to 
 
 | You need | Notes |
 |---|---|
-| **Python 3.12** | TensorFlow does not support every Python version yet (3.14, for example). Check with `python3 --version` |
+| **Python 3.12** | The version this project was tested with. Check with `python3 --version` |
 | **Git** | To clone the repository |
 | **Internet access** | Only for installing the libraries and for the first data download |
-| **About 2 GB of free disk space** | Mostly TensorFlow, plus PyTorch, which SDV installs automatically |
+| **About 1 GB of free disk space** | Mostly PyTorch, which SDV installs automatically |
 
 ### Step 1: Clone the repository
 
@@ -401,9 +448,9 @@ python analyze.py
 
 | Script | What it does | Time on a laptop* |
 |---|---|---|
-| `prepare_data.py` | Downloads the data, splits it, generates G1–G10, checks the files | about 40 seconds |
-| `run_experiment.py` | 62 searches plus test evaluations, then the checks | about 3 minutes |
-| `analyze.py` | Collapse Index, LSTM, plots, summary and findings | about 15 seconds |
+| `prepare_data.py` | Downloads the data, splits it, generates G1–G10, checks the files | about 1 minute |
+| `run_experiment.py` | 62 searches plus test evaluations, then the checks | about 3–4 minutes |
+| `analyze.py` | Collapse Index, plots, summary and findings | a few seconds |
 
 \*Measured on an Apple Silicon Mac. Slower machines can take several times longer, and that's fine.
 
@@ -431,7 +478,7 @@ Checks
   rows in results.csv: 62 (expected 62)
   largest evals_used:  32 (must be <= 40)
   baseline test F1 (HC): 0.659  OK
-  re-running G7 ratio=0.5 HC to check it reproduces ... identical
+  re-running G9 ratio=0.9 HC to check it reproduces ... identical
 ```
 
 `analyze.py` prints the summary table and the findings. When it finishes, open **`results/findings.txt`** and the two images in **`results/plots/`**.
@@ -442,37 +489,45 @@ Checks
 
 These numbers come from running the three scripts exactly as described above. With the versions in `requirements.txt` you should get the same numbers.
 
-### Plot 1: Collapse Index by generation
+### Plot 1: Collapse Index by generation (ratio effect)
 
 Colour shows the ratio. Solid lines are Hill Climbing and dashed lines are Simulated Annealing. Above 0% means worse than the baseline.
 
 ![Collapse Index by generation](results/plots/ci_vs_generation.png)
 
-### Plot 2: LSTM forecast
+### Plot 2: Hill Climbing vs Simulated Annealing (algorithm effect)
 
-One panel per series, showing the actual CI (G0–G10), the LSTM's predictions for the held-out G9–G10 (diamonds), and its forecast for G11–G13 (shaded area).
+Each dot is one training mix. Dots above the dashed line mean SA got the higher value, and dots on the line mean a tie. The left panel shows the validation F1 each algorithm found; the right panel shows how many evaluations each used.
 
-![LSTM forecast](results/plots/lstm_forecast.png)
+![Hill Climbing vs Simulated Annealing](results/plots/hc_vs_sa.png)
 
 ### Summary table
 
-| Real/synthetic | Algorithm | Mean val F1 | Test F1 at G5 | Test F1 at G10 | CI at G5 | CI at G10 | Mean CI over G1–G10 | LSTM MAE | Naive MAE |
-|---|---|---|---|---|---|---|---|---|---|
-| 90/10 | HC | 0.656 | 0.664 | 0.648 | −0.9% | +1.6% | −0.3% | 0.011 | 0.015 |
-| 90/10 | SA | 0.658 | 0.677 | 0.669 | −2.7% | −1.4% | −1.2% | 0.008 | 0.008 |
-| 70/30 | HC | 0.627 | 0.665 | 0.664 | −1.0% | −0.9% | −0.1% | 0.004 | 0.007 |
-| 70/30 | SA | 0.633 | 0.665 | 0.664 | −0.9% | −0.8% | −0.7% | 0.005 | 0.007 |
-| 50/50 | HC | 0.628 | 0.654 | 0.670 | +0.6% | −1.7% | +0.1% | 0.019 | 0.023 |
-| 50/50 | SA | 0.633 | 0.654 | 0.670 | +0.7% | −1.6% | −1.0% | 0.010 | 0.007 |
+| Real/synthetic | Algorithm | Mean val F1 | Mean evaluations | Test F1 at G5 | Test F1 at G10 | CI at G5 | CI at G10 | Mean CI over G1–G10 |
+|---|---|---|---|---|---|---|---|---|
+| 90/10 | HC | 0.656 | 20.8 | 0.664 | 0.648 | −0.9% | +1.6% | −0.3% |
+| 90/10 | SA | 0.658 | 24.0 | 0.677 | 0.669 | −2.7% | −1.4% | −1.2% |
+| 70/30 | HC | 0.627 | 22.8 | 0.665 | 0.664 | −1.0% | −0.9% | −0.1% |
+| 70/30 | SA | 0.633 | 23.5 | 0.665 | 0.664 | −0.9% | −0.8% | −0.7% |
+| 50/50 | HC | 0.628 | 22.6 | 0.654 | 0.670 | +0.6% | −1.7% | +0.1% |
+| 50/50 | SA | 0.633 | 26.6 | 0.654 | 0.670 | +0.7% | −1.6% | −1.0% |
 
 The baseline (100% real data) test F1 is **0.659** for both algorithms.
 
 ### What we found
 
-- **Ratio effect.** Ten generations of GaussianCopula data did **not** cause a clear collapse. Every Collapse Index value stays between −2.7% and +5.7%, and the values move up and down rather than climbing. The mean CI does not grow steadily as the synthetic share increases. The clearer ratio effect is on the *validation* F1 the search reached: about 0.66 with 10% synthetic data, against about 0.63 with 30% or 50%.
-- **Algorithm effect.** Simulated Annealing found a validation F1 at least as good as Hill Climbing in **27 of 30** synthetic runs: higher in 11 and equal in 16. It also had a slightly lower (better) mean Collapse Index at every ratio. It used a few more evaluations on average (24.7 against 21.8, out of 40).
-- **Forecast.** Over the 12 held-out predictions, the LSTM's error (MAE **0.0095**) is lower than the naive forecast's (**0.0112**). It wins in 4 of 6 series. However, the CI series look mostly like noise around zero, and on noisy data the naive guess is easy to beat. So this does **not** prove the LSTM found a real trend.
-- **Data drift.** The share of >50K rows drifts from 23.9% in G0 to 25.5% in G10. Keep this in mind when reading small F1 changes.
+**Ratio effect**
+- The model's test F1 did **not** clearly degrade over 10 generations. Every Collapse Index value stays between −2.7% and +5.7%, and the values move up and down rather than climbing.
+- The mean CI does not grow steadily as the synthetic share increases.
+- The clearer ratio effect is on the *validation* F1 the search reached: about 0.66 with 10% synthetic data, against about 0.63 with 30% or 50%.
+
+**Algorithm effect**
+- Simulated Annealing found a validation F1 at least as good as Hill Climbing in **27 of 30** synthetic runs: higher in 11 and equal in 16. It also had a slightly lower (better) mean Collapse Index at every ratio.
+- **Hill Climbing stopped at a local optimum in all 31 of its runs**, always with budget left over.
+- **The biggest Collapse Index in the experiment (+5.7%, G4 50/50) is a Hill Climbing trap.** On the same training data, Simulated Annealing scored −1.6%. The worked example in [Section 3](#worked-example-one-real-run-generation-4-5050-mix) shows that exact run.
+- **Fairness caveat:** SA used a few more evaluations on average (24.7 against 21.8, out of 40). Part of its advantage may come from simply trying more settings.
+
+**Data drift.** The share of >50K rows drifts from 23.9% in G0 to 25.5% in G10. Keep this in mind when reading small F1 changes.
 
 The full auto-generated text is in `results/findings.txt`.
 
@@ -487,11 +542,10 @@ The full auto-generated text is in `results/findings.txt`.
 | `data/metadata.json` | Phase 1 | The column types given to SDV |
 | `results/results.csv` | Phase 2 | One row per run (62 in total) |
 | `results/collapse_index.csv` | Phase 3 | Test F1 and Collapse Index for every series and generation |
-| `results/lstm_forecast.csv` | Phase 3 | LSTM and naive predictions for G9–G10, and the LSTM forecast for G11–G13 |
 | `results/summary.csv` | Phase 3 | One row per ratio × algorithm, the key numbers at a glance |
 | `results/findings.txt` | Phase 3 | The research question answered in plain English |
-| `results/plots/ci_vs_generation.png` | Phase 3 | Plot 1 |
-| `results/plots/lstm_forecast.png` | Phase 3 | Plot 2 |
+| `results/plots/ci_vs_generation.png` | Phase 3 | Plot 1: ratio effect |
+| `results/plots/hc_vs_sa.png` | Phase 3 | Plot 2: algorithm effect |
 
 ### Columns in `results.csv`
 
@@ -519,7 +573,6 @@ Every setting lives in [`config.py`](config.py). No number such as a seed, size 
 | Test other mixtures | `RATIOS` |
 | Search other hyperparameter values | `GRID`, `START_STATE` |
 | Make SA explore more or less | `SA_START_TEMPERATURE`, `SA_COOLING_RATE` |
-| Change the LSTM | `LSTM_UNITS`, `LSTM_EPOCHS`, `LSTM_WINDOW`, `LSTM_BATCH_SIZE` |
 
 > ⚠️ After changing anything that affects Phase 1 or 2, **delete `results/results.csv`** and run the scripts again. Otherwise `run_experiment.py` will skip runs it thinks are already finished.
 
@@ -549,14 +602,27 @@ Every random step uses `SEED = 42`, and the library versions are pinned, so the 
 | **Column types are set by hand for SDV** | Stops `income` being generated as 0.37, and keeps `capital-gain` and `capital-loss` (about 90% zeros) numerical |
 | **The same real rows for every generation at a given ratio** | Isolates the effect of the generation from the effect of which real rows were drawn |
 | **The encoder is fitted once on G0** | Every run uses identical codes, and unseen categories become −1 instead of crashing |
+| **Random Forest as the model** | Three meaningful settings make a real search problem for HC and SA. It also takes numbers and categories without scaling, and is stable and reproducible with a seed |
+| **Neighbours change one setting by one step** | Keeps each step cheap (at most 6 choices). The trade-off is that improvements needing two settings to change at once are invisible |
 | **Only unique evaluations count towards the budget** | Hill Climbing re-checks neighbours often, so caching keeps the HC vs SA comparison fair |
 | **SA has a safety cap (`SA_MAX_STEPS`)** | Once cooled, SA can sit on a peak where every neighbour is already scored. Repeats are free, so the budget never runs out and the loop would never end. The cap stops it, which is why SA sometimes uses fewer than 40 evaluations |
 | **SA returns the best state ever seen** | SA can walk downhill, so where it ends is not always where it was best |
+| **T₀ = 0.05, cooling × 0.9 per step** | Typical F1 differences are about 0.01, so early on SA accepts small drops about 82% of the time, and after about 40 steps almost never |
 | **The Collapse Index uses the same algorithm's baseline** | A difference between HC and SA is never mistaken for collapse |
 | **Negative Collapse Index values are kept** | Synthetic data slightly helping is a legitimate result |
-| **The LSTM is checked against a naive forecast** | The honest test of whether the LSTM learned anything |
 
-**Scope.** Components kept: the Adult Income dataset, a frozen test split, SDV recursive generation, 3 real/synthetic ratios, Random Forest, Hill Climbing, Simulated Annealing, accuracy, precision, recall and F1, the Collapse Index and the LSTM. Components dropped: feature drift, SHAP and synthetic-data quality metrics.
+### Scope
+
+**Components kept:**
+- the Adult Income dataset and a frozen test split;
+- SDV recursive generation and 3 real/synthetic ratios;
+- Random Forest, tuned by Hill Climbing and by Simulated Annealing;
+- accuracy, precision, recall and F1;
+- the Collapse Index.
+
+**Components dropped:**
+- feature drift, SHAP and synthetic-data quality metrics;
+- **LSTM forecasting.** It was removed to keep the focus on the two search algorithms. An earlier version included it, and its forecasts were no more accurate than simply predicting the average Collapse Index.
 
 ---
 
@@ -564,13 +630,13 @@ Every random step uses `SEED = 42`, and the library versions are pinned, so the 
 
 | Problem | Fix |
 |---|---|
-| `pip install` fails on `tensorflow` | Your Python version is probably too new or too old. Use **Python 3.12** |
+| `pip install` fails | Use **Python 3.12**, the version the project was tested with. Very new Python versions may not have ready-made packages yet |
 | `ModuleNotFoundError: No module named 'pandas'` (or `sdv`, `sklearn`…) | The virtual environment isn't active. Run `source .venv/bin/activate` (on Windows, `.venv\Scripts\activate`) |
+| You moved or renamed the project folder and nothing runs | A virtual environment remembers its original location. Delete `.venv` and repeat Steps 2–4 |
 | `ModuleNotFoundError: No module named 'src'` or `'config'` | Run the scripts from the project folder, e.g. `python run_experiment.py`, and don't run files inside `src/` directly |
 | `prepare_data.py` can't download the data | Phase 1 needs internet access to `archive.ics.uci.edu`. Check your connection and try again |
 | `results.csv not found` or `expected 62 rows` from `analyze.py` | Run (or finish) `python run_experiment.py` first |
 | My numbers differ from the README | Install the exact versions in `requirements.txt`. A different SDV version can generate different rows |
-| TensorFlow prints messages about the CPU | These messages are harmless and you can ignore them |
 
 ---
 
@@ -583,28 +649,31 @@ Every random step uses `SEED = 42`, and the library versions are pinned, so the 
 | **Generation (G0…G10)** | G0 is real data. G*n* is synthetic data learned from G*n−1* |
 | **Ratio** | Share of real rows in a training mix. 0.7 means 70% real and 30% synthetic, shown as "70/30" |
 | **Stratified split** | A split that keeps the same share of each class in every part |
-| **Random Forest** | Many decision trees that vote together. Our prediction model |
+| **Random Forest** | Many decision trees, each trained on a random sample of rows, that vote together. Our prediction model |
 | **Hyperparameter** | A setting chosen *before* training, such as the number of trees |
+| **State** | One combination of hyperparameters, written as positions in the grid |
+| **Neighbour** | A state that differs by one step in one hyperparameter |
+| **Evaluation / budget** | Training and scoring one state. Each search may make 40 unique evaluations |
+| **Hill Climbing** | A search that always moves to the best neighbour and stops when nothing is better |
+| **Simulated Annealing** | A search that sometimes accepts worse moves early on to escape local optima |
+| **Temperature (T)** | Simulated Annealing's willingness to accept worse moves. It shrinks every step |
+| **Local optimum** | A state better than all its neighbours but not the best overall |
 | **Precision** | Of the people predicted to earn >50K, the share who really do: TP / (TP + FP) |
 | **Recall** | Of the people who really earn >50K, the share we found: TP / (TP + FN) |
 | **F1 score** | One number that balances precision and recall: 2·P·R / (P + R) |
-| **Hill Climbing** | A search that always moves to the best neighbour and stops when nothing is better |
-| **Simulated Annealing** | A search that sometimes accepts worse moves early on to escape local optima |
-| **Local optimum** | A state better than all its neighbours but not the best overall |
 | **Collapse Index (CI)** | Relative loss of test F1 against the baseline |
-| **LSTM** | Long Short-Term Memory, a neural network designed for sequences |
-| **MAE** | Mean Absolute Error, the average size of the forecast mistakes |
-| **Naive forecast** | Predicting that the next value equals the last one |
 
 ---
 
-## 13. Team and contributing
+## 13. Team and contributions
 
-| Phase | Owner | Files |
-|---|---|---|
-| 1. Data and generation | Ram | `prepare_data.py`, `src/dataset.py`, `src/generation.py`, `src/mixing.py` |
-| 2. Optimization and evaluation | Amogh (objective, HC, evaluation), Ram (SA) | `run_experiment.py`, `src/encoding.py`, `src/model.py`, `src/search.py` |
-| 3. Degradation and forecasting | Nehal | `analyze.py`, `src/collapse.py`, `src/forecasting.py`, `src/plots.py`, `src/report.py` |
+| Member | Role | Plan sections | Files and functions |
+|---|---|---|---|
+| **Ram** | Data, generation and Simulated Annealing | 1.1–1.6, 2.4 | `prepare_data.py`, `src/dataset.py`, `src/generation.py`, `src/mixing.py`, `simulated_annealing()` in `src/search.py` |
+| **Amogh** | Search framework, Hill Climbing and the experiment runner | 2.1–2.3, 2.6 | `run_experiment.py`, `src/encoding.py`, `state_to_params()`, `neighbors()`, `Objective` and `hill_climbing()` in `src/search.py` |
+| **Nehal** | Model evaluation and analysis | 2.5, 3.1–3.2 | `analyze.py`, `src/model.py`, `src/collapse.py`, `src/plots.py`, `src/report.py` |
+
+**Any member may be asked about any part.** Everyone should be able to explain [Section 3](#3-implementation), especially the worked example of Hill Climbing and Simulated Annealing.
 
 **The contract between phases.** `config.py`, the file names in `data/` and `results/`, and the columns of `results.csv` are shared by everyone. If one person changes a seed or a column name, another person's code can silently break or produce numbers that can't be compared. **Agree with the team before changing them.**
 

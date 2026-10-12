@@ -5,5 +5,4 @@ pandas==2.3.3
 scikit-learn==1.9.1
 sdv==1.38.5
 ucimlrepo==0.0.7
-tensorflow==2.21.0
 matplotlib==3.11.2

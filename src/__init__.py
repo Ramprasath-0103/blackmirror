@@ -10,9 +10,8 @@ Each module does one job and maps to one section of the plan:
     model.py        Phase 2.2/2.5  train a Random Forest and score it
     search.py       Phase 2.2-2.4  search space, objective, Hill Climbing, Sim. Annealing
     collapse.py     Phase 3.1      the Collapse Index
-    forecasting.py  Phase 3.2      the LSTM forecast and the naive baseline
-    plots.py        Phase 3.3      the two figures
-    report.py       Phase 3.3      the summary table and written findings
+    plots.py        Phase 3.2      the two figures (ratio effect, algorithm effect)
+    report.py       Phase 3.2      the summary table and written findings
 
 The three scripts in the project folder (prepare_data.py, run_experiment.py,
 analyze.py) import these modules and run them in the right order.

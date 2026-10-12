@@ -1,10 +1,10 @@
 """
-plots.py - the two figures that answer the research question (plan Phase 3.3).
+plots.py - the two figures that answer the research question (plan Phase 3.2).
 
-    plot_collapse_index(ci_table, path)                Plot 1: CI vs generation, 6 lines
-    plot_lstm_forecast(ci_table, forecasts, path)      Plot 2: actual, holdout check, forecast
+    plot_collapse_index(ci_table, path)    Plot 1: Collapse Index vs generation   (ratio effect)
+    plot_hc_vs_sa(results, path)           Plot 2: what HC and SA found, run by run (algorithm effect)
 
-Colour = ratio (same colours in both plots). Line style = algorithm.
+Colour = ratio (same colours in both plots).
 """
 
 import matplotlib
@@ -12,8 +12,7 @@ import matplotlib
 matplotlib.use("Agg")  # draw straight to files; no window needed
 import matplotlib.pyplot as plt  # imported after the line above so the setting takes effect
 import pandas as pd
-from matplotlib.lines import Line2D
-from matplotlib.ticker import PercentFormatter
+from matplotlib.ticker import MaxNLocator, PercentFormatter
 
 import config
 from src.collapse import series_values
@@ -22,7 +21,6 @@ from src.collapse import series_values
 # for colour-blind readers.
 RATIO_COLORS = {0.9: "#2a78d6", 0.7: "#eb6834", 0.5: "#1baf7a"}
 LINE_STYLES = {"HC": "-", "SA": "--"}
-ALGORITHM_NAMES = {"HC": "Hill Climbing", "SA": "Simulated Annealing"}
 
 INK = "#0b0b0b"
 INK_SECONDARY = "#52514e"
@@ -81,56 +79,58 @@ def plot_collapse_index(ci_table: pd.DataFrame, path) -> None:
     plt.close(fig)
 
 
-def plot_lstm_forecast(ci_table: pd.DataFrame, forecasts: pd.DataFrame, path) -> None:
+def plot_hc_vs_sa(results: pd.DataFrame, path) -> None:
     """
-    Plot 2: a grid with one small chart per series (rows = algorithm, columns = ratio).
+    Plot 2: Hill Climbing vs Simulated Annealing, one dot per training mix (31 dots).
 
-    Each chart shows the real CI (G0-G10), what the LSTM predicted for the
-    held-out G9-G10, and its forecast for G11-G13 (shaded area).
+    Left:  the validation F1 each algorithm found.
+    Right: how many evaluations each algorithm used.
+    Above the dashed line = SA got the higher value, on the line = a tie.
     """
-    last_generation = config.N_GENERATIONS + config.N_FORECAST_STEPS
-    fig, axes = plt.subplots(len(config.ALGORITHMS), len(config.RATIOS),
-                             figsize=(13, 6.5), sharex=True, sharey=True)
+    panels = [("val_f1", "Validation F1 found"),
+              ("evals_used", f"Evaluations used (budget {config.EVAL_BUDGET})")]
+    fig, axes = plt.subplots(1, 2, figsize=(11, 5.4))
 
-    for row, algorithm in enumerate(config.ALGORITHMS):
-        for col, ratio in enumerate(config.RATIOS):
-            ax = axes[row, col]
-            color = RATIO_COLORS[ratio]
-            actual = series_values(ci_table, algorithm, ratio)
-            series = forecasts[(forecasts["algorithm"] == algorithm) & (forecasts["ratio"] == ratio)]
-            holdout = series[series["kind"] == "holdout"]
-            future = series[series["kind"] == "forecast"]
+    for ax, (metric, title) in zip(axes, panels):
+        paired = results.pivot_table(index=["generation", "ratio"], columns="algorithm", values=metric)
+        paired = paired.reset_index()
 
-            ax.axvspan(config.N_GENERATIONS + 0.5, last_generation + 0.5, color=GRID_COLOR, alpha=0.5, zorder=0)
-            ax.plot(range(len(actual)), actual, color=color, linewidth=2, marker="o", markersize=4)
-            ax.plot(holdout["generation"], holdout["lstm"], linestyle="none",
-                    marker="D", markersize=7, markerfacecolor=BACKGROUND, markeredgecolor=color,
-                    markeredgewidth=1.6)
-            # Join the forecast to the last real point so the line is continuous
-            # (markevery skips that first point so the real G10 marker stays visible).
-            ax.plot([config.N_GENERATIONS] + future["generation"].tolist(),
-                    [actual[-1]] + future["lstm"].tolist(),
-                    color=color, linewidth=2, linestyle=":", marker="o", markersize=4,
-                    markerfacecolor=BACKGROUND, markevery=slice(1, None))
+        low, high = paired[["HC", "SA"]].min().min(), paired[["HC", "SA"]].max().max()
+        margin = (high - low) * 0.08
+        ax.plot([low - margin, high + margin], [low - margin, high + margin],
+                color=INK_SECONDARY, linewidth=0.8, linestyle="--", zorder=1)
 
-            _style_axis(ax, last_generation)
-            ax.tick_params(axis="x", labelsize=7)
-            ax.set_title(f"{config.ratio_label(ratio)}  ·  {ALGORITHM_NAMES[algorithm]}",
-                         loc="left", fontsize=10)
+        for ratio in [1.0] + config.RATIOS:
+            group = paired[paired["ratio"] == ratio]
+            label = ("baseline (100% real)" if ratio == 1.0
+                     else f"{config.ratio_label(ratio)} real/synthetic")
+            ax.scatter(group["HC"], group["SA"], s=46, color=RATIO_COLORS.get(ratio, INK_SECONDARY),
+                       edgecolors=BACKGROUND, linewidths=1, label=label, zorder=3)
 
-    legend_items = [
-        Line2D([], [], color=INK_SECONDARY, linewidth=2, marker="o", markersize=4,
-               label="Actual Collapse Index (G0-G10)"),
-        Line2D([], [], color=INK_SECONDARY, linestyle="none", marker="D", markersize=7,
-               markerfacecolor=BACKGROUND, label="LSTM check on held-out G9-G10"),
-        Line2D([], [], color=INK_SECONDARY, linewidth=2, linestyle=":", marker="o",
-               markersize=4, markerfacecolor=BACKGROUND, label="LSTM forecast G11-G13 (shaded)"),
-    ]
-    fig.legend(handles=legend_items, loc="lower center", ncol=3, bbox_to_anchor=(0.5, 0.0))
-    fig.suptitle("LSTM forecast of the Collapse Index", x=0.01, ha="left",
+        ax.set_xlim(low - margin, high + margin)
+        ax.set_ylim(low - margin, high + margin)
+        ax.set_aspect("equal")
+        ax.set_title(title, loc="left", fontsize=11)
+        ax.set_xlabel("Hill Climbing")
+        ax.set_ylabel("Simulated Annealing")
+
+        if metric == "evals_used":
+            ax.xaxis.set_major_locator(MaxNLocator(integer=True))
+            ax.yaxis.set_major_locator(MaxNLocator(integer=True))
+        else:
+            # Label the mix where the two algorithms disagreed the most.
+            gap = (paired["SA"] - paired["HC"]).abs().idxmax()
+            far = paired.loc[gap]
+            ax.annotate(f"G{int(far['generation'])} {config.ratio_label(far['ratio'])}: largest gap",
+                        (far["HC"], far["SA"]), xytext=(8, -14), textcoords="offset points",
+                        color=INK_SECONDARY, fontsize=8)
+
+    axes[0].legend(loc="upper left")
+    fig.suptitle("Hill Climbing vs Simulated Annealing, run by run", x=0.01, ha="left",
                  fontsize=13, fontweight="bold", color=INK)
-    fig.supylabel("Collapse Index", color=INK_SECONDARY, fontsize=10)
+    fig.text(0.01, 0.905, "Each dot is one training mix. Above the dashed line = SA higher, "
+                          "on the line = both found the same.", color=INK_SECONDARY, fontsize=9)
 
-    fig.tight_layout(rect=(0, 0.05, 1, 1))
+    fig.tight_layout(rect=(0, 0, 1, 0.9))
     fig.savefig(path, dpi=150)
     plt.close(fig)

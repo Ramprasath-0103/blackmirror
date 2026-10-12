@@ -1,0 +1,9 @@
+# Exact versions this project was tested with (Python 3.12).
+# Pinning them keeps results identical across team members' machines:
+# SDV in particular can produce different synthetic data in other versions.
+pandas==2.3.3
+scikit-learn==1.9.1
+sdv==1.38.5
+ucimlrepo==0.0.7
+tensorflow==2.21.0
+matplotlib==3.11.2

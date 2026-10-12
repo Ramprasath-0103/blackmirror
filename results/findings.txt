@@ -1,0 +1,23 @@
+RESEARCH QUESTION: How do the synthetic-data ratio and the optimization algorithm
+affect predictive performance and degradation across generations?
+
+Baseline (G0, 100% real data): test F1 = 0.659 (HC), 0.659 (SA)
+
+1) RATIO EFFECT - mean Collapse Index over G1-G10 (positive = worse than baseline)
+   HC: 90/10 -0.3%,  70/30 -0.1%,  50/50 +0.1%
+   SA: 90/10 -1.2%,  70/30 -0.7%,  50/50 -1.0%
+   -> The Collapse Index does NOT grow steadily with the synthetic share.
+   -> Every Collapse Index value (all series, G1-G10) lies between -2.7% and +5.7%.
+
+2) ALGORITHM EFFECT - Hill Climbing vs Simulated Annealing at each ratio
+   90/10:  mean val F1  HC 0.656 vs SA 0.658;   mean CI  HC -0.3% vs SA -1.2%
+   70/30:  mean val F1  HC 0.627 vs SA 0.633;   mean CI  HC -0.1% vs SA -0.7%
+   50/50:  mean val F1  HC 0.628 vs SA 0.633;   mean CI  HC +0.1% vs SA -1.0%
+   -> Over the 30 synthetic runs, SA found a higher validation F1 than HC in 11, the same in 16, and a lower one in 3.
+   -> Average evaluations used: HC 21.8, SA 24.7 (budget 40).
+
+3) FORECAST CHECK - LSTM vs naive 'repeat the last value', on held-out G9-G10
+   LSTM MAE 0.0095  vs  naive MAE 0.0112  -> the LSTM beats the naive baseline (4 of 6 series).
+   LSTM forecasts for G11-G13 range from -1.1% to -0.2%.
+   Note: the naive baseline is weak on a noisy series, so beating it does not by itself
+   prove the LSTM found a real trend - look at lstm_forecast.png before claiming one.

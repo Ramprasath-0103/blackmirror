@@ -1,20 +1,20 @@
 RESEARCH QUESTION: How do the synthetic-data ratio and the optimization algorithm
 affect predictive performance and degradation across generations?
 
-Baseline (G0, 100% real data): test F1 = 0.659 (HC), 0.659 (SA)
+Baseline (G0, 100% real data): test F1 = 0.631 (HC), 0.631 (SA)
 
 1) RATIO EFFECT - mean Collapse Index over G1-G10 (positive = worse than baseline)
-   HC: 90/10 -0.3%,  70/30 -0.1%,  50/50 +0.1%
-   SA: 90/10 -1.2%,  70/30 -0.7%,  50/50 -1.0%
-   -> The Collapse Index does NOT grow steadily with the synthetic share.
-   -> Every Collapse Index value (all series, G1-G10) lies between -2.7% and +5.7%.
+   HC: 90/10 +4.7%,  70/30 +7.8%,  50/50 +10.0%
+   SA: 90/10 +1.9%,  70/30 +5.3%,  50/50 +7.7%
+   -> For both algorithms, a larger synthetic share led to more degradation.
+   -> Every Collapse Index value (all series, G1-G10) lies between -0.6% and +18.4%.
 
 2) ALGORITHM EFFECT - Hill Climbing vs Simulated Annealing at each ratio
-   90/10:  mean val F1  HC 0.656 vs SA 0.658;   mean CI  HC -0.3% vs SA -1.2%
-   70/30:  mean val F1  HC 0.627 vs SA 0.633;   mean CI  HC -0.1% vs SA -0.7%
-   50/50:  mean val F1  HC 0.628 vs SA 0.633;   mean CI  HC +0.1% vs SA -1.0%
-   -> Over the 30 synthetic runs, SA found a higher validation F1 than HC in 11, the same in 16, and a lower one in 3.
-   -> Average evaluations used: HC 21.8, SA 24.7 (budget 40).
+   90/10:  mean val F1  HC 0.583 vs SA 0.600;   mean CI  HC +4.7% vs SA +1.9%
+   70/30:  mean val F1  HC 0.564 vs SA 0.582;   mean CI  HC +7.8% vs SA +5.3%
+   50/50:  mean val F1  HC 0.552 vs SA 0.569;   mean CI  HC +10.0% vs SA +7.7%
+   -> Over the 30 synthetic runs, SA found a higher validation F1 than HC in 14, the same in 8, and a lower one in 8.
+   -> Average evaluations used: HC 20.8, SA 26.5 (budget 40).
    -> HC stopped at a local optimum (with budget left over) in 31 of 31 runs.
-   -> The largest Collapse Index (+5.7%) is HC at G4 50/50; SA on the same training data scored -1.6%.
-      Same data, very different result: that spike comes from the search, not the data.
+   -> The largest Collapse Index (+18.4%) is HC at G7 50/50; SA on the same training data scored +8.2%.
+      Same training data, so about 10.3 points of that spike come from the search, not the data.

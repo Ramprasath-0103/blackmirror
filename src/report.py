@@ -99,8 +99,10 @@ def _algorithm_effect(results: pd.DataFrame, ci_table: pd.DataFrame, summary: pd
     lines.append(f"   -> The largest Collapse Index ({worst['collapse_index']:+.1%}) is {worst['algorithm']} at "
                  f"G{int(worst['generation'])} {config.ratio_label(worst['ratio'])}; {other} on the same "
                  f"training data scored {other_ci:+.1%}.")
-    if other_ci < worst["collapse_index"] / 2:
-        lines.append("      Same data, very different result: that spike comes from the search, not the data.")
+    if other_ci < worst["collapse_index"]:
+        gap = worst["collapse_index"] - other_ci
+        lines.append(f"      Same training data, so about {gap * 100:.1f} points of that spike come from the "
+                     f"search, not the data.")
     return lines
 
 

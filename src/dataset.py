@@ -28,11 +28,10 @@ def load_adult() -> pd.DataFrame:
 
 def clean_adult(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Return a cleaned copy with 12 features + income (13 columns).
+    Return a cleaned copy with 10 features + income (11 columns).
 
-    - fnlwgt is a census sampling weight: it describes how the person was
-      sampled, not the person, so it is dropped.
-    - education is a 1:1 copy of education-num, so it is dropped.
+    - Four columns are dropped (config.DROPPED_COLUMNS explains each one):
+      fnlwgt, education, capital-gain and capital-loss.
     - Missing values appear as both NaN and "?"; both become the category
       "Unknown" so that no rows are lost.
     - The label appears as "<=50K", "<=50K.", ">50K" and ">50K.". We remove the

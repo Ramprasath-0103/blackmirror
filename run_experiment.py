@@ -115,7 +115,8 @@ def check_results(encoder, val_xy, test_xy) -> None:
         if baseline.empty:
             continue
         f1_base = baseline["test_f1"].item()
-        verdict = "OK" if 0.65 <= f1_base <= 0.70 else "outside the expected 0.65-0.70, check encoding/labels"
+        low, high = config.EXPECTED_BASELINE_F1
+        verdict = "OK" if low <= f1_base <= high else f"outside the expected {low}-{high}, check encoding/labels"
         print(f"  baseline test F1 ({algorithm}): {f1_base:.3f}  {verdict}")
 
     # Reproducibility: pick any finished run, do it again, compare the numbers.

@@ -27,7 +27,6 @@ def build_metadata(g0: pd.DataFrame) -> Metadata:
 
     Setting types by hand matters: income is stored as 0/1, so auto-detection
     could call it numerical and SDV would happily generate values like 0.37.
-    capital-gain / capital-loss are ~90% zeros and must stay numerical.
 
     (Written for SDV 1.38. The metadata API changed during the 1.x releases,
     so check the SDV docs if you use a different version.)

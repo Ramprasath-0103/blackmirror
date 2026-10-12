@@ -3,7 +3,7 @@ prepare_data.py - PHASE 1: Data & Generation.         Run:  python prepare_data.
 
 What it does, step by step:
     1. Download the Adult Income dataset from UCI.
-    2. Clean it (13 columns, no missing values, income is 0/1).
+    2. Clean it (11 columns, no missing values, income is 0/1).
     3. Subsample 10,000 rows and split them into G0 / V / Test.
     4. Build the SDV metadata.
     5. Generate G1 ... G10, each from the previous generation.
@@ -44,7 +44,7 @@ def check_outputs() -> None:
         df = pd.read_csv(path)
 
         if list(df.columns) != config.ALL_COLUMNS:
-            problems.append(f"{name}: columns are not the expected 13")
+            problems.append(f"{name}: columns are not the expected {len(config.ALL_COLUMNS)}")
         if df.isna().any().any():
             problems.append(f"{name}: contains NaN values")
         if not set(df[config.TARGET].unique()) <= {0, 1}:
@@ -62,7 +62,8 @@ def check_outputs() -> None:
         for problem in problems:
             print(f"   - {problem}")
         raise SystemExit(1)
-    print("\n  All checks passed: 13 columns, no NaN, income in {0, 1}, 6,400 rows per generation.")
+    print(f"\n  All checks passed: {len(config.ALL_COLUMNS)} columns, no NaN, income in {{0, 1}}, "
+          f"{config.N_ROWS:,} rows per generation.")
     print("  Watch the >50K column: if it drifts away from G0, that partly explains later F1 changes.")
 
 
@@ -75,7 +76,7 @@ def main() -> None:
 
     print("Step 2/6  Cleaning")
     clean = clean_adult(raw)
-    print(f"  {clean.shape[1]} columns left (12 features + {config.TARGET})")
+    print(f"  {clean.shape[1]} columns left ({len(config.FEATURES)} features + {config.TARGET})")
 
     print("Step 3/6  Subsampling and splitting")
     g0, val, test = split_dataset(clean)

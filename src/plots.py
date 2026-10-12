@@ -50,6 +50,7 @@ def _style_axis(ax, last_generation: int) -> None:
     ax.axhline(0, color=INK_SECONDARY, linewidth=0.8, zorder=1)
     ax.set_xticks(range(last_generation + 1))
     ax.set_xticklabels([f"G{g}" for g in range(last_generation + 1)])
+    ax.yaxis.set_major_locator(MaxNLocator(steps=[1, 2, 5, 10]))   # whole-percent ticks only
     ax.yaxis.set_major_formatter(PercentFormatter(xmax=1.0, decimals=0))
 
 
@@ -122,10 +123,11 @@ def plot_hc_vs_sa(results: pd.DataFrame, path) -> None:
             gap = (paired["SA"] - paired["HC"]).abs().idxmax()
             far = paired.loc[gap]
             ax.annotate(f"G{int(far['generation'])} {config.ratio_label(far['ratio'])}: largest gap",
-                        (far["HC"], far["SA"]), xytext=(8, -14), textcoords="offset points",
-                        color=INK_SECONDARY, fontsize=8)
+                        (far["HC"], far["SA"]), xytext=(6, -60), textcoords="offset points",
+                        color=INK_SECONDARY, fontsize=8,
+                        arrowprops=dict(arrowstyle="-", color=INK_SECONDARY, linewidth=0.8))
 
-    axes[0].legend(loc="upper left")
+    axes[0].legend(loc="lower right")
     fig.suptitle("Hill Climbing vs Simulated Annealing, run by run", x=0.01, ha="left",
                  fontsize=13, fontweight="bold", color=INK)
     fig.text(0.01, 0.905, "Each dot is one training mix. Above the dashed line = SA higher, "

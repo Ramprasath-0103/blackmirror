@@ -29,13 +29,11 @@ N_VAL = 1_600              # validation set, scored by Hill Climbing / Sim. Anne
 N_ROWS = 6_400             # rows in G0 and in every synthetic generation
 
 # ---------------------------------------------------------------------------
-# Columns after cleaning (Phase 1.2): 12 features + the target = 13 columns
+# Columns after cleaning (Phase 1.2): 10 features + the target = 11 columns
 # ---------------------------------------------------------------------------
 NUMERICAL_COLUMNS = [
     "age",
     "education-num",
-    "capital-gain",
-    "capital-loss",
     "hours-per-week",
 ]
 CATEGORICAL_COLUMNS = [
@@ -50,8 +48,14 @@ CATEGORICAL_COLUMNS = [
 FEATURES = NUMERICAL_COLUMNS + CATEGORICAL_COLUMNS
 ALL_COLUMNS = FEATURES + [TARGET]
 
-# Columns that are dropped during cleaning, and why (see prepare_data.py)
-DROPPED_COLUMNS = ["fnlwgt", "education"]
+# Columns that are dropped during cleaning, and why:
+#   fnlwgt        a census sampling weight - describes how a person was sampled, not the person
+#   education     an exact copy of education-num
+#   capital-gain  ~92% zeros, and capital-loss ~95% zeros. SDV's GaussianCopula cannot copy
+#   capital-loss  that spike at zero, so synthetic rows get non-zero values and become trivially
+#                 recognisable. The forest then just sets them aside, which hides the effect we
+#                 want to measure. (README section 3 shows the evidence.)
+DROPPED_COLUMNS = ["fnlwgt", "education", "capital-gain", "capital-loss"]
 # Columns where missing values appear as NaN or "?"
 COLUMNS_WITH_MISSING = ["workclass", "occupation", "native-country"]
 
@@ -74,6 +78,11 @@ SA_COOLING_RATE = 0.9      # temperature is multiplied by this after every step
 SA_MAX_STEPS = 1_000
 
 ALGORITHMS = ["HC", "SA"]  # short names written to results.csv
+
+# Sanity check for the baseline (100% real data) test F1. A value far outside
+# this range usually means an encoding or label bug. Without the two capital
+# columns the baseline is lower than the plan's 0.65-0.70, which assumed them.
+EXPECTED_BASELINE_F1 = (0.55, 0.70)
 
 # ---------------------------------------------------------------------------
 # File locations

@@ -296,6 +296,9 @@ blackmirror/
 ├── prepare_data.py        ← PHASE 1  run first
 ├── run_experiment.py      ← PHASE 2  run second
 ├── analyze.py             ← PHASE 3  run third
+├── plotting/
+│   ├── generate_plots.py  ← optional, standalone research figures from results.csv
+│   └── README.md          ← how to run and interpret the figures
 │
 ├── src/
 │   ├── dataset.py         ← load, clean, split; read saved files
@@ -448,6 +451,22 @@ Baseline (100% real data): test F1 **0.631** for both algorithms.
 - The share of >50K people in the synthetic data drifts between 22.7% and 25.5% (it's 23.9% in G0).
 - Part of the zig-zag in Plot 1 comes from the search choosing different settings in each run, not from the data alone.
 
+### 7.4.1 Additional research plots
+
+To recreate the two figures above and generate three additional, more focused
+views of the results, run:
+
+```bash
+python -m plotting.generate_plots
+```
+
+The five high-resolution figures are saved separately under `plotting/plots/`;
+the existing figures in `results/plots/` are not overwritten. See
+[`plotting/README.md`](plotting/README.md) for descriptions and interpretation
+notes. The mean-degradation figure's ranges show variation across generations,
+not confidence intervals; repeated experiment seeds are needed to estimate
+statistical uncertainty.
+
 ### 7.5 Reading `results.csv`
 
 | Column | Meaning |
@@ -523,4 +542,3 @@ Every random step uses `SEED = 42` and the versions are pinned, so a rerun gives
 - **Any member may be asked about any part.** Everyone should be able to explain [Section 4](#4-implementation), especially the [worked example](#43-worked-example-one-real-run-g1-5050-mix).
 - **The shared contract:** `config.py`, the file names in `data/` and `results/`, and the columns of `results.csv`. Agree as a team before changing them.
 - **Before pushing,** run all three scripts and check that every check passes.
-

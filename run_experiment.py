@@ -1,21 +1,3 @@
-"""
-run_experiment.py - PHASE 2: Optimization & Evaluation.     Run:  python run_experiment.py
-
-For every run it:
-    1. builds the training mixture  make_mix(generation, ratio)
-    2. searches hyperparameters with Hill Climbing or Simulated Annealing (scored on V)
-    3. retrains the best forest and evaluates it ONCE on the frozen Test set
-    4. appends one row to results/results.csv
-
-The runs are:
-    baseline: generation 0, ratio 1.0 (pure real data)          ->  1
-    every generation 1..10 x every ratio in {0.9, 0.7, 0.5}     -> 30
-    ... each done with both HC and SA                           -> x2 = 62 runs
-
-It is safe to stop and restart: finished runs are skipped, so a crash or a
-sleeping laptop only loses the run that was in progress.
-"""
-
 import random
 import time
 
@@ -36,11 +18,8 @@ RESULT_COLUMNS = [
 ]
 
 
-# ---------------------------------------------------------------------------
-# Which runs exist, and which are already done
-# ---------------------------------------------------------------------------
 def list_runs() -> list[tuple[int, float, str]]:
-    """All 62 (generation, ratio, algorithm) combinations, baseline first."""
+   
     mixtures = [(0, 1.0)] + [(g, r) for g in range(1, config.N_GENERATIONS + 1) for r in config.RATIOS]
     return [(g, r, algorithm) for g, r in mixtures for algorithm in ALGORITHMS]
 
@@ -48,8 +27,7 @@ def list_runs() -> list[tuple[int, float, str]]:
 def load_results() -> pd.DataFrame:
     if not config.RESULTS_CSV.exists():
         return pd.DataFrame(columns=RESULT_COLUMNS)
-    # pandas treats the text "None" as a missing value by default, which would
-    # turn max_depth into floats (8 -> 8.0). Reading it as text keeps it as written.
+  
     return pd.read_csv(config.RESULTS_CSV, dtype={"max_depth": str}, keep_default_na=False)
 
 
@@ -59,7 +37,7 @@ def finished_runs() -> set[tuple[int, float, str]]:
 
 
 def append_result(row: dict) -> None:
-    """Add one row to results.csv straight away (header only if the file is new)."""
+   
     write_header = not config.RESULTS_CSV.exists()
     pd.DataFrame([row], columns=RESULT_COLUMNS).to_csv(
         config.RESULTS_CSV, mode="a", header=write_header, index=False
@@ -70,16 +48,14 @@ def append_result(row: dict) -> None:
 # One run
 # ---------------------------------------------------------------------------
 def run_one(generation: int, ratio: float, algorithm: str, encoder, val_xy, test_xy) -> dict:
-    """Search on V, then evaluate the winner once on Test. Returns a results row."""
+    
     X_train, y_train = to_xy(make_mix(generation, ratio), encoder)
     X_val, y_val = val_xy
     X_test, y_test = test_xy
 
-    # Step 2: hyperparameter search (only ever looks at V, never at Test)
+    
     objective = Objective(X_train, y_train, X_val, y_val)
     result = ALGORITHMS[algorithm](objective)
-
-    # Step 3: retrain with the best settings and score on Test exactly once
     model = train_random_forest(result.best_params, X_train, y_train)
     metrics = test_metrics(model, X_test, y_test)
 
@@ -99,10 +75,6 @@ def run_one(generation: int, ratio: float, algorithm: str, encoder, val_xy, test
         "evals_used": result.evals_used,
     }
 
-
-# ---------------------------------------------------------------------------
-# Checks from the plan's "Phase 2 is done when" list
-# ---------------------------------------------------------------------------
 def check_results(encoder, val_xy, test_xy) -> None:
     results = load_results()
     expected = len(list_runs())
@@ -119,13 +91,11 @@ def check_results(encoder, val_xy, test_xy) -> None:
         verdict = "OK" if low <= f1_base <= high else f"outside the expected {low}-{high}, check encoding/labels"
         print(f"  baseline test F1 ({algorithm}): {f1_base:.3f}  {verdict}")
 
-    # Reproducibility: pick any finished run, do it again, compare the numbers.
     if not results.empty:
         saved = results.sample(n=1, random_state=random.randrange(10_000)).iloc[0]
         g, r, a = int(saved["generation"]), float(saved["ratio"]), saved["algorithm"]
         print(f"  re-running G{g} ratio={r} {a} to check it reproduces ...", end=" ", flush=True)
         again = run_one(g, r, a, encoder, val_xy, test_xy)
-        # pandas saves floats at full precision, so comparing as text is exact.
         same = all(str(again[column]) == str(saved[column]) for column in RESULT_COLUMNS)
         print("identical" if same else "DIFFERENT - something is not seeded")
 
@@ -134,7 +104,6 @@ def check_results(encoder, val_xy, test_xy) -> None:
 def main() -> None:
     config.RESULTS_DIR.mkdir(exist_ok=True)
 
-    # These never change between runs, so prepare them once.
     encoder = fit_encoder(read_generation(0))
     val_xy = to_xy(read_validation(), encoder)
     test_xy = to_xy(read_test(), encoder)

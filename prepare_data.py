@@ -1,21 +1,3 @@
-"""
-prepare_data.py - PHASE 1: Data & Generation.         Run:  python prepare_data.py
-
-What it does, step by step:
-    1. Download the Adult Income dataset from UCI.
-    2. Clean it (11 columns, no missing values, income is 0/1).
-    3. Subsample 10,000 rows and split them into G0 / V / Test.
-    4. Build the SDV metadata.
-    5. Generate G1 ... G10, each from the previous generation.
-    6. Check the output files against the plan's "Phase 1 is done when" list.
-
-Files written to data/:
-    G0.csv       6,400 real rows     (training data / seed for SDV)
-    val.csv      1,600 real rows     (scored by the hyperparameter search)
-    test.csv     2,000 real rows     (final evaluation only)
-    G1..G10.csv  6,400 synthetic rows each
-"""
-
 import hashlib
 
 import pandas as pd
@@ -31,7 +13,7 @@ def save(df: pd.DataFrame, path) -> None:
 
 
 def check_outputs() -> None:
-    """Re-read every file and confirm it matches the plan's checklist."""
+   
     print("\nStep 6/6  Checking the files")
 
     files = {"test": config.TEST_CSV, "val": config.VAL_CSV}
@@ -52,8 +34,6 @@ def check_outputs() -> None:
         if name.startswith("G") and len(df) != config.N_ROWS:
             problems.append(f"{name}: has {len(df)} rows, expected {config.N_ROWS}")
 
-        # A short fingerprint of the file's bytes. Run the script twice:
-        # identical fingerprints mean identical files (reproducibility check).
         fingerprint = hashlib.md5(path.read_bytes()).hexdigest()[:10]
         print(f"  {name:<6} {len(df):>6,} {df[config.TARGET].mean():>7.1%}   {fingerprint}")
 

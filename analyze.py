@@ -1,15 +1,3 @@
-"""
-analyze.py - PHASE 3: Degradation & Analysis.         Run:  python analyze.py
-
-Reads results/results.csv (made by run_experiment.py) and produces:
-
-    results/collapse_index.csv          Collapse Index for 6 series x 11 generations
-    results/summary.csv                 one row per ratio x algorithm
-    results/findings.txt                the research question answered in plain English
-    results/plots/ci_vs_generation.png  Plot 1: ratio effect
-    results/plots/hc_vs_sa.png          Plot 2: algorithm effect
-"""
-
 import pandas as pd
 
 import config
@@ -17,8 +5,7 @@ from src.collapse import collapse_index_table
 from src.plots import plot_collapse_index, plot_hc_vs_sa
 from src.report import build_summary, write_findings
 
-EXPECTED_RUNS = 2 * (1 + config.N_GENERATIONS * len(config.RATIOS))   # 62
-
+EXPECTED_RUNS = 2 * (1 + config.N_GENERATIONS * len(config.RATIOS))  
 
 def main() -> None:
     if not config.RESULTS_CSV.exists():

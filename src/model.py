@@ -8,6 +8,8 @@ import config
 def train_random_forest(params: dict, X: pd.DataFrame, y: pd.Series) -> RandomForestClassifier:
     model = RandomForestClassifier(**params, random_state=config.SEED, n_jobs=-1)
     model.fit(X, y)
+    # parallel predict sums tree votes in a random order, so tied rows can flip
+    model.set_params(n_jobs=1)
     return model
 
 

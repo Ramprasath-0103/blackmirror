@@ -70,7 +70,6 @@ small { color: var(--text-3); }
 /* ---------- Page frame ---------- */
 .site-header { text-align: center; padding: 56px 16px 36px; }
 .site-header h1 { font-size: clamp(36px, 6vw, 56px); font-weight: 300; letter-spacing: -0.035em; }
-.site-header p { color: var(--text-2); margin: 12px auto 0; max-width: 620px; }
 
 .layout {
   display: grid;

@@ -1,24 +1,15 @@
-"""
-plots.py - the two figures that answer the research question (plan Phase 3.2).
 
-    plot_collapse_index(ci_table, path)    Plot 1: Collapse Index vs generation   (ratio effect)
-    plot_hc_vs_sa(results, path)           Plot 2: what HC and SA found, run by run (algorithm effect)
-
-Colour = ratio (same colours in both plots).
-"""
 
 import matplotlib
 
-matplotlib.use("Agg")  # draw straight to files; no window needed
-import matplotlib.pyplot as plt  # imported after the line above so the setting takes effect
+matplotlib.use("Agg")  
+import matplotlib.pyplot as plt  
 import pandas as pd
 from matplotlib.ticker import MaxNLocator, PercentFormatter
 
 import config
 from src.collapse import series_values
 
-# One colour per ratio. These three were checked to stay distinguishable
-# for colour-blind readers.
 RATIO_COLORS = {0.9: "#2a78d6", 0.7: "#eb6834", 0.5: "#1baf7a"}
 LINE_STYLES = {"HC": "-", "SA": "--"}
 
@@ -46,7 +37,7 @@ plt.rcParams.update({
 
 
 def _style_axis(ax, last_generation: int) -> None:
-    """Shared look: G0, G1, ... on the x-axis, percentages on the y-axis, a zero line."""
+
     ax.axhline(0, color=INK_SECONDARY, linewidth=0.8, zorder=1)
     ax.set_xticks(range(last_generation + 1))
     ax.set_xticklabels([f"G{g}" for g in range(last_generation + 1)])
@@ -55,7 +46,7 @@ def _style_axis(ax, last_generation: int) -> None:
 
 
 def plot_collapse_index(ci_table: pd.DataFrame, path) -> None:
-    """Plot 1: one line per (ratio, algorithm). Above 0 = worse than the baseline."""
+
     fig, ax = plt.subplots(figsize=(9, 5.2))
 
     for algorithm in config.ALGORITHMS:
@@ -81,13 +72,7 @@ def plot_collapse_index(ci_table: pd.DataFrame, path) -> None:
 
 
 def plot_hc_vs_sa(results: pd.DataFrame, path) -> None:
-    """
-    Plot 2: Hill Climbing vs Simulated Annealing, one dot per training mix (31 dots).
 
-    Left:  the validation F1 each algorithm found.
-    Right: how many evaluations each algorithm used.
-    Above the dashed line = SA got the higher value, on the line = a tie.
-    """
     panels = [("val_f1", "Validation F1 found"),
               ("evals_used", f"Evaluations used (budget {config.EVAL_BUDGET})")]
     fig, axes = plt.subplots(1, 2, figsize=(11, 5.4))
@@ -119,7 +104,6 @@ def plot_hc_vs_sa(results: pd.DataFrame, path) -> None:
             ax.xaxis.set_major_locator(MaxNLocator(integer=True))
             ax.yaxis.set_major_locator(MaxNLocator(integer=True))
         else:
-            # Label the mix where the two algorithms disagreed the most.
             gap = (paired["SA"] - paired["HC"]).abs().idxmax()
             far = paired.loc[gap]
             ax.annotate(f"G{int(far['generation'])} {config.ratio_label(far['ratio'])}: largest gap",

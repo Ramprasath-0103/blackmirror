@@ -18,6 +18,7 @@ NUMERICAL_COLUMNS = [
     "education-num",
     "hours-per-week",
 ]
+
 CATEGORICAL_COLUMNS = [
     "workclass",
     "marital-status",
@@ -39,6 +40,7 @@ GRID = {
     "max_depth":         [2, 4, 6, 8, 10, None],
     "min_samples_split": [2, 4, 6, 8, 10],
 }
+
 START_STATE = (1, 1, 0)    
 
 SA_START_TEMPERATURE = 0.05

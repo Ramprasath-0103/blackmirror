@@ -1,24 +1,14 @@
-"""
-report.py - the summary table and the written answer (plan Phase 3.2).
-
-    build_summary(results, ci_table)                  one row per ratio x algorithm -> summary.csv
-    write_findings(results, ci_table, summary)        the research question answered in plain English
-
-The research question has two factors, and the findings answer each one:
-    Ratio effect      fix the algorithm, compare 90/10 vs 70/30 vs 50/50
-    Algorithm effect  fix the ratio, compare Hill Climbing vs Simulated Annealing
-"""
 
 import numpy as np
 import pandas as pd
 
 import config
 
-CHECKPOINTS = (5, 10)   # the generations reported in the summary table
+CHECKPOINTS = (5, 10)   
 
 
 def build_summary(results: pd.DataFrame, ci_table: pd.DataFrame) -> pd.DataFrame:
-    """For each ratio x algorithm: what the search found, and test F1 / CI at G5 and G10."""
+
     rows = []
     for ratio in config.RATIOS:
         for algorithm in config.ALGORITHMS:
@@ -40,7 +30,7 @@ def build_summary(results: pd.DataFrame, ci_table: pd.DataFrame) -> pd.DataFrame
             row["mean_ci_G1_G10"] = ci.loc[1:, "collapse_index"].mean()
             rows.append(row)
 
-    # Not rounded here, so the findings use exact values; analyze.py rounds when saving.
+   
     return pd.DataFrame(rows)
 
 
@@ -48,7 +38,7 @@ def _ratio_effect(summary: pd.DataFrame, ci_table: pd.DataFrame) -> list[str]:
     lines = ["1) RATIO EFFECT - mean Collapse Index over G1-G10 (positive = worse than baseline)"]
     always_worse_with_more_synthetic = True
     for algorithm in config.ALGORITHMS:
-        part = summary[summary["algorithm"] == algorithm]          # rows ordered 90/10, 70/30, 50/50
+        part = summary[summary["algorithm"] == algorithm]        
         values = part["mean_ci_G1_G10"].to_numpy()
         labels = part["real/synthetic"].tolist()
         lines.append(f"   {algorithm}: " + ",  ".join(f"{label} {value:+.1%}" for label, value in zip(labels, values)))
@@ -73,7 +63,7 @@ def _algorithm_effect(results: pd.DataFrame, ci_table: pd.DataFrame, summary: pd
                      f"mean CI  HC {part.loc['HC', 'mean_ci_G1_G10']:+.1%}"
                      f" vs SA {part.loc['SA', 'mean_ci_G1_G10']:+.1%}")
 
-    # Compare the two algorithms run by run on the 30 synthetic mixtures.
+
     synthetic = results[results["generation"] > 0]
     paired = synthetic.pivot_table(index=["generation", "ratio"], columns="algorithm", values="val_f1")
     sa_better = int((paired["SA"] > paired["HC"]).sum())
@@ -86,12 +76,12 @@ def _algorithm_effect(results: pd.DataFrame, ci_table: pd.DataFrame, summary: pd
     lines.append(f"   -> Average evaluations used: HC {evals['HC']:.1f}, SA {evals['SA']:.1f} "
                  f"(budget {config.EVAL_BUDGET}).")
 
-    # HC only stops early when no neighbour is better, so "budget left over" = "stuck on a local optimum".
+
     hc = results[results["algorithm"] == "HC"]
     stuck = int((hc["evals_used"] < config.EVAL_BUDGET).sum())
     lines.append(f"   -> HC stopped at a local optimum (with budget left over) in {stuck} of {len(hc)} runs.")
 
-    # Where did the single worst Collapse Index come from?
+
     worst = ci_table[ci_table["generation"] > 0].nlargest(1, "collapse_index").iloc[0]
     other = "SA" if worst["algorithm"] == "HC" else "HC"
     other_ci = ci_table[(ci_table["algorithm"] == other) & (ci_table["ratio"] == worst["ratio"])
@@ -107,7 +97,6 @@ def _algorithm_effect(results: pd.DataFrame, ci_table: pd.DataFrame, summary: pd
 
 
 def write_findings(results: pd.DataFrame, ci_table: pd.DataFrame, summary: pd.DataFrame) -> str:
-    """Return the findings as text (also printed and saved by analyze.py)."""
     baseline = results[results["generation"] == 0].set_index("algorithm")["test_f1"]
     lines = [
         "RESEARCH QUESTION: How do the synthetic-data ratio and the optimization algorithm",

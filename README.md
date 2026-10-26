@@ -8,6 +8,8 @@ BlackMirror tests what happens when synthetic data is made from synthetic data, 
 
 **Repository:** https://github.com/Ramprasath-0103/blackmirror
 
+**Two ways to run it:** the three command-line scripts, or a web app (`python app.py`) that runs the same scripts from your browser and lets you watch both search algorithms step by step ([6.5](#65-the-web-app)).
+
 **At a glance**
 - **More synthetic data, more damage.** Average test F1 falls from **0.631** with 100% real data to **0.610** (90/10 real/synthetic), **0.590** (70/30) and **0.575** (50/50).
 - **Simulated Annealing beats Hill Climbing at every ratio:** it finds higher validation F1 and has less damage. Hill Climbing got stuck on a local optimum in all 31 of its runs.
@@ -66,6 +68,8 @@ At every generation we:
 | **SDV** | 1.38.5 | `GaussianCopulaSynthesizer`, which creates the synthetic generations | `src/generation.py` |
 | **NumPy** | 2.x (comes with the above) | The seeded random numbers used by Simulated Annealing | `src/search.py` |
 | **matplotlib** | 3.11.2 | The two plots | `src/plots.py` |
+| **Flask** | 3.1.3 | The small local server behind the web app | `web/server.py` |
+| **HTML, CSS, JavaScript** | — | The web app's page and interactive charts (no build step, no frameworks) | `web/static/` |
 
 Exact versions are pinned in [`requirements.txt`](requirements.txt), so everyone gets the same numbers.
 
@@ -296,9 +300,7 @@ blackmirror/
 ├── prepare_data.py        ← PHASE 1  run first
 ├── run_experiment.py      ← PHASE 2  run second
 ├── analyze.py             ← PHASE 3  run third
-├── plotting/
-│   ├── generate_plots.py  ← optional, standalone research figures from results.csv
-│   └── README.md          ← how to run and interpret the figures
+├── app.py                 ← optional: start the web app (runs the same three scripts)
 │
 ├── src/
 │   ├── dataset.py         ← load, clean, split; read saved files
@@ -310,6 +312,13 @@ blackmirror/
 │   ├── collapse.py        ← the Collapse Index
 │   ├── plots.py           ← the two figures
 │   └── report.py          ← summary table and written findings
+│
+├── web/                   ← the web app (section 6.5)
+│   ├── server.py          ← the web addresses the page talks to
+│   ├── jobs.py            ← runs the three scripts in the background and keeps their output
+│   ├── explorer.py        ← replays HC and SA on one training mix, decision by decision
+│   ├── content.py         ← turns the result files into data for the page
+│   └── static/            ← index.html, styles.css and js/ (one file per part of the page)
 │
 ├── data/                  ← created by Phase 1 (not stored in git)
 └── results/               ← created by Phases 2 and 3
@@ -402,6 +411,28 @@ run_experiment.py   [ 1/62] G0  real=100%  HC  val F1 0.596  test F1 0.631  eval
 
 Then open **`results/findings.txt`** and **`results/plots/`**.
 
+### 6.5 The web app
+
+The same experiment also runs from a browser, which is handy for demonstrations. Start it from the project folder (with the virtual environment active):
+
+```bash
+python app.py
+```
+
+It opens **http://127.0.0.1:8000** in your browser. Press `Ctrl+C` in the terminal to stop it. Options: `--port 8080` to use another port, `--no-browser` to skip opening a window.
+
+| Part of the page | What it does |
+|---|---|
+| **Pipeline** (left) | Runs phase 1, 2, 3 or all three. Each button starts the *same script* you would run in the terminal, so the command line and the web app always agree. A progress bar follows the run, and **Stop** ends it |
+| **Search explorer** (left) | Pick a generation and a ratio, then **Trace this run**. Both algorithms run live on that mix and every decision is shown |
+| **Overview** | The research question, the headline findings, test F1 per training mix and the average damage per ratio and algorithm |
+| **Results** | Interactive versions of both plots (hover, or focus and use the arrow keys), the summary table and all 62 runs. Every chart can also be shown as a table |
+| **Search explorer** | Hill Climbing round by round (every neighbour it scored and why it moved or stopped) and Simulated Annealing step by step (temperature, Δ, the acceptance chance and the random roll), plus a chart of the best F1 found against evaluations used. A trace is checked against `results.csv` |
+| **Dataset** | The columns used and dropped (with reasons), the splits, the share of high earners per generation, and real rows next to synthetic ones |
+| **Run log** | The scripts' output, exactly as the terminal shows it |
+
+The web app only reads and runs what is already in the project: it does not change any results by itself, and it only listens on your own computer (`127.0.0.1`).
+
 ---
 
 ## 7. Results
@@ -450,22 +481,6 @@ Baseline (100% real data): test F1 **0.631** for both algorithms.
 **Smaller notes**
 - The share of >50K people in the synthetic data drifts between 22.7% and 25.5% (it's 23.9% in G0).
 - Part of the zig-zag in Plot 1 comes from the search choosing different settings in each run, not from the data alone.
-
-### 7.4.1 Additional research plots
-
-To recreate the two figures above and generate three additional, more focused
-views of the results, run:
-
-```bash
-python -m plotting.generate_plots
-```
-
-The five high-resolution figures are saved separately under `plotting/plots/`;
-the existing figures in `results/plots/` are not overwritten. See
-[`plotting/README.md`](plotting/README.md) for descriptions and interpretation
-notes. The mean-degradation figure's ranges show variation across generations,
-not confidence intervals; repeated experiment seeds are needed to estimate
-statistical uncertainty.
 
 ### 7.5 Reading `results.csv`
 
@@ -542,3 +557,4 @@ Every random step uses `SEED = 42` and the versions are pinned, so a rerun gives
 - **Any member may be asked about any part.** Everyone should be able to explain [Section 4](#4-implementation), especially the [worked example](#43-worked-example-one-real-run-g1-5050-mix).
 - **The shared contract:** `config.py`, the file names in `data/` and `results/`, and the columns of `results.csv`. Agree as a team before changing them.
 - **Before pushing,** run all three scripts and check that every check passes.
+- **The web app** (`app.py`, `web/`) is only a way to present and run the experiment. It uses everyone's code unchanged, so it doesn't change anyone's part.

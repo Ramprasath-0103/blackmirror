@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>BlackMirror</title>
+  <meta name="description" content="Recursive synthetic data, searched with Hill Climbing and Simulated Annealing.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+  <link rel="stylesheet" href="/static/styles.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23111113'/%3E%3Crect x='7' y='7' width='18' height='18' rx='3' fill='none' stroke='%23fafafa' stroke-width='2'/%3E%3C/svg%3E">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to results</a>
+
+  <header class="site-header">
+    <h1>BlackMirror</h1>
+    <p>What happens when models learn from data made by other models &mdash; explored with
+      Hill Climbing and Simulated Annealing.</p>
+  </header>
+
+  <div class="layout">
+    <aside class="card side" aria-label="Controls">
+      <section aria-labelledby="pipeline-heading">
+        <h2 class="eyebrow" id="pipeline-heading">Pipeline</h2>
+        <ol class="phases" id="phases"></ol>
+
+        <label class="check">
+          <input type="checkbox" id="fresh">
+          <span>Start the search from scratch
+            <small>Deletes results/results.csv before phase 2</small></span>
+        </label>
+
+        <div class="button-row">
+          <button class="btn btn-primary" id="run-all" type="button">Run full pipeline</button>
+          <button class="btn btn-secondary" id="stop" type="button" hidden>Stop</button>
+        </div>
+
+        <div class="job" id="job" aria-live="polite"></div>
+        <p class="hint">Each button runs the same script you would run in the terminal.
+          The output appears under <a href="#log" data-tab-link="log">Run log</a>.</p>
+      </section>
+
+      <section aria-labelledby="explorer-heading">
+        <h2 class="eyebrow" id="explorer-heading">Search explorer</h2>
+        <div class="field-row">
+          <label class="field">
+            <span>Generation</span>
+            <select id="ex-generation"></select>
+          </label>
+          <label class="field">
+            <span>Real / synthetic</span>
+            <select id="ex-ratio"></select>
+          </label>
+        </div>
+        <button class="btn btn-outline btn-block" id="ex-trace" type="button">Trace this run</button>
+        <p class="hint">Replays Hill Climbing and Simulated Annealing on one training mix, decision by decision.</p>
+      </section>
+
+      <section aria-labelledby="settings-heading">
+        <h2 class="eyebrow" id="settings-heading">Settings</h2>
+        <dl class="settings" id="settings"></dl>
+        <p class="hint">Change these in <code>config.py</code>.</p>
+      </section>
+    </aside>
+
+    <main class="card content" id="main" tabindex="-1">
+      <div class="tabs" role="tablist" aria-label="Views">
+        <button class="tab" role="tab" id="tab-overview" aria-controls="panel-overview" data-tab="overview">Overview</button>
+        <button class="tab" role="tab" id="tab-results" aria-controls="panel-results" data-tab="results">Results</button>
+        <button class="tab" role="tab" id="tab-explorer" aria-controls="panel-explorer" data-tab="explorer">Search explorer</button>
+        <button class="tab" role="tab" id="tab-dataset" aria-controls="panel-dataset" data-tab="dataset">Dataset</button>
+        <button class="tab" role="tab" id="tab-log" aria-controls="panel-log" data-tab="log">Run log</button>
+      </div>
+
+      <section class="panel" role="tabpanel" id="panel-overview" aria-labelledby="tab-overview" tabindex="0"></section>
+      <section class="panel" role="tabpanel" id="panel-results" aria-labelledby="tab-results" tabindex="0" hidden></section>
+      <section class="panel" role="tabpanel" id="panel-explorer" aria-labelledby="tab-explorer" tabindex="0" hidden></section>
+      <section class="panel" role="tabpanel" id="panel-dataset" aria-labelledby="tab-dataset" tabindex="0" hidden></section>
+      <section class="panel" role="tabpanel" id="panel-log" aria-labelledby="tab-log" tabindex="0" hidden></section>
+    </main>
+  </div>
+
+  <footer class="site-footer">
+    <p>Adult Income dataset, UCI Machine Learning Repository &middot; Everything here also runs from the terminal:
+      <code>python prepare_data.py</code> &rarr; <code>python run_experiment.py</code> &rarr; <code>python analyze.py</code></p>
+  </footer>
+
+  <script type="module" src="/static/js/main.js"></script>
+</body>
+</html>

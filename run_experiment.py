@@ -13,7 +13,7 @@ from src.search import ALGORITHMS, Objective
 RESULT_COLUMNS = [
     "generation", "ratio", "algorithm",
     "n_estimators", "max_depth", "min_samples_split",
-    "val_f1", "test_accuracy", "test_precision", "test_recall", "test_f1",
+    "val_f1", "test_accuracy", "test_precision", "test_recall", "test_f1",  
     "evals_used",
 ]
 
@@ -44,9 +44,6 @@ def append_result(row: dict) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# One run
-# ---------------------------------------------------------------------------
 def run_one(generation: int, ratio: float, algorithm: str, encoder, val_xy, test_xy) -> dict:
     
     X_train, y_train = to_xy(make_mix(generation, ratio), encoder)
